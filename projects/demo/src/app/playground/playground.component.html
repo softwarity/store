@@ -1,0 +1,186 @@
+<section class="playground">
+  <h2>Playground</h2>
+
+  <!-- =============================== -->
+  <!-- DECORATOR API (primary section)  -->
+  <!-- =============================== -->
+  <h3>Decorator API — Persistent table configuration</h3>
+  <p class="section-desc">
+    Try it: toggle columns, sort, change page size or navigate pages.
+    Every change is <strong>automatically persisted</strong> thanks to deep mutation tracking.
+    <strong>Reload the page</strong> — your configuration is still there. Check the storage inspector below to see the raw JSON in real time.
+  </p>
+
+  <interactive-code language="typescript">
+    <textarea condition="decorator=LocalStored">import { ${decorator} } from '@softwarity/store';
+
+@Component({ ... })
+export class MyComponent {
+
+  // Persists to localStorage.
+  // 1st param: schema version — increment it when the object
+  // shape changes to discard stale browser data automatically.
+  // 2nd param: custom storage key (default: ClassName.property).
+  @LocalStored(${version}, '${id}')
+  tableConfig = { displayedColumns: ['name', 'age', 'email'], ... };
+
+  // Deep mutations are tracked automatically:
+  this.tableConfig.sortDirection = 'desc';       // saves!
+  this.tableConfig.displayedColumns.push('role'); // saves!
+  this.tableConfig.displayedColumns.splice(0, 1); // saves!
+}</textarea>
+    <textarea condition="decorator=SessionStored">import { ${decorator} } from '@softwarity/store';
+
+@Component({ ... })
+export class MyComponent {
+
+  // Persists to sessionStorage — lives only for the current
+  // browser tab. No version needed: data is naturally
+  // short-lived and discarded when the tab closes.
+  // Optional param: custom storage key (default: ClassName.property).
+  @SessionStored('${sessionId}')
+  tableConfig = { displayedColumns: ['name', 'age', 'email'], ... };
+
+  // Deep mutations are tracked the same way:
+  this.tableConfig.sortDirection = 'desc';       // saves!
+  this.tableConfig.displayedColumns.push('role'); // saves!
+  this.tableConfig.displayedColumns.splice(0, 1); // saves!
+}</textarea>
+    <code-binding key="decorator" type="select" options="LocalStored,SessionStored" value="LocalStored" carousel (change)="setStorageMode($any($event).detail)"></code-binding>
+    <code-binding key="version" type="number" value="1" min="1" max="99"></code-binding>
+    <code-binding key="id" type="string" value="demo-table-config"></code-binding>
+    <code-binding key="sessionId" type="string" value="demo-table-config"></code-binding>
+  </interactive-code>
+
+  <!-- Controls: column toggles + page size -->
+  <div class="controls">
+    <div class="control-group">
+      <span class="control-label">Columns</span>
+      <div class="control-buttons">
+        @for (col of allColumns; track col.key) {
+          <button class="toggle-btn" [class.active]="isColumnVisible(col.key)" (click)="toggleColumn(col.key)">
+            <mat-icon>{{ isColumnVisible(col.key) ? 'visibility' : 'visibility_off' }}</mat-icon>
+            {{ col.label }}
+          </button>
+        }
+      </div>
+    </div>
+    <div class="control-group">
+      <span class="control-label">Page size</span>
+      <div class="control-buttons">
+        @for (size of [5, 10, 12]; track size) {
+          <button class="toggle-btn" [class.active]="tableConfig.pageSize === size" (click)="setPageSize(size)">
+            {{ size }}
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          @for (col of allColumns; track col.key) {
+            @if (isColumnVisible(col.key)) {
+              <th (click)="setSort(col.key)">
+                <span class="th-content">
+                  {{ col.label }}
+                  @if (tableConfig.sortColumn === col.key) {
+                    <mat-icon class="sort-icon">
+                      {{ tableConfig.sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                    </mat-icon>
+                  }
+                </span>
+              </th>
+            }
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of pagedData; track $index) {
+          <tr>
+            @for (col of allColumns; track col.key) {
+              @if (isColumnVisible(col.key)) {
+                <td>
+                  @if (col.key === 'status') {
+                    <span class="status-badge" [class]="getCellValue(row, col.key)">{{ getCellValue(row, col.key) }}</span>
+                  } @else {
+                    {{ getCellValue(row, col.key) }}
+                  }
+                </td>
+              }
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination">
+    <button class="page-btn" (click)="prevPage()" [disabled]="tableConfig.currentPage <= 0">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <span class="page-info">Page {{ tableConfig.currentPage + 1 }} / {{ totalPages }}</span>
+    <button class="page-btn" (click)="nextPage()" [disabled]="tableConfig.currentPage >= totalPages - 1">
+      <mat-icon>chevron_right</mat-icon>
+    </button>
+    <button class="reset-btn" (click)="resetConfig()">
+      <mat-icon>restart_alt</mat-icon> Reset
+    </button>
+  </div>
+
+  <!-- Storage inspector -->
+  <div class="storage-inspector">
+    <div class="inspector-header">
+      <span class="storage-badge" [class.local]="storageMode === 'LocalStored'" [class.session]="storageMode === 'SessionStored'">{{ storageBadgeLabel }}</span>
+      <code class="storage-key">{{ storageKey }}</code>
+    </div>
+    <pre class="storage-json">{{ storageContent }}</pre>
+  </div>
+
+  <!-- =============================== -->
+  <!-- SIGNALS API (secondary section)  -->
+  <!-- =============================== -->
+  <h3>Signals API — localSignal / sessionSignal</h3>
+  <p class="section-desc">
+    Alternative signal-based API. Returns a <code>StoredSignal&lt;T&gt;</code> with plain property access and <code>$prop()</code> reactive signals.
+    Assign properties directly — persistence is automatic.
+    Change the values below and <strong>reload the page</strong> — they persist too.
+  </p>
+
+  <interactive-code language="typescript">
+    <textarea>import { localSignal } from '@softwarity/store';
+
+@Component({ ... })
+export class MyComponent {
+  prefs = localSignal(
+    { theme: '${theme}', lang: '${lang}' },
+    1,
+    { id: 'demo-signal-prefs' }
+  );
+
+  // Plain property assignment — persists automatically
+  this.prefs.theme = '${theme}';
+
+  // Reactive signal for templates
+  // template: [value]="prefs.$theme()"
+}</textarea>
+    <code-binding key="theme" type="select" options="dark,light,auto" [value]="signalPrefs.$theme()" (change)="setTheme($any($event).detail)"></code-binding>
+    <code-binding key="lang" type="select" options="en,fr,de,es" [value]="signalPrefs.$lang()" (change)="setLang($any($event).detail)"></code-binding>
+  </interactive-code>
+
+  <div class="storage-inspector">
+    <div class="inspector-header">
+      <span class="storage-badge local">localStorage</span>
+      <code class="storage-key">demo-signal-prefs</code>
+      <button class="reset-btn small" (click)="resetSignal()">
+        <mat-icon>restart_alt</mat-icon>
+      </button>
+    </div>
+    <pre class="storage-json">{{ "theme: " + signalPrefs.$theme() + ", lang: " + signalPrefs.$lang() }}</pre>
+  </div>
+
+</section>

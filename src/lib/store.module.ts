@@ -1,4 +1,5 @@
-import {Inject, NgModule} from '@angular/core';
+import {DestroyRef, Inject, NgModule} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {BehaviorSubject, Observable} from 'rxjs';
 import {USER_ID} from './common';
 import {StoreService} from './store.service';
@@ -12,9 +13,10 @@ import {CommonModule} from '@angular/common';
 })
 export class StoreModule {
   constructor(
-    @Inject(USER_ID) userId$: Observable<string>
+    @Inject(USER_ID) userId$: Observable<string>,
+    destroyRef: DestroyRef
   ) {
-    userId$.subscribe(u => StoreService.userId$.next(u));
+    userId$.pipe(takeUntilDestroyed(destroyRef)).subscribe(u => StoreService.userId$.next(u));
   }
 }
 export function defaultUserIdFactory() {

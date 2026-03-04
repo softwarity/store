@@ -1,0 +1,293 @@
+<section class="documentation">
+  <h2>Documentation</h2>
+
+  <!-- Installation -->
+  <article class="doc-section">
+    <h3>Installation</h3>
+    <interactive-code language="shell">
+      <textarea>npm install @softwarity/store</textarea>
+    </interactive-code>
+  </article>
+
+  <!-- Setup -->
+  <article class="doc-section">
+    <h3>Setup</h3>
+
+    <h4>Standalone (recommended)</h4>
+    <interactive-code language="typescript">
+      <textarea>import { provideStore } from '@softwarity/store';
+import { BehaviorSubject } from 'rxjs';
+
+// Optional: provide a userId stream for user-scoped storage
+const userId$ = new BehaviorSubject<string>('');
+
+export const appConfig = {
+  providers: [provideStore(userId$)]
+};</textarea>
+    </interactive-code>
+
+    <h4>Module-based (legacy)</h4>
+    <interactive-code language="typescript">
+      <textarea>import { StoreModule } from '@softwarity/store';
+
+@NgModule({ imports: [StoreModule] })
+export class AppModule {}</textarea>
+    </interactive-code>
+  </article>
+
+  <!-- =============================== -->
+  <!-- DECORATOR API (primary)          -->
+  <!-- =============================== -->
+  <article class="doc-section">
+    <h3>&#64;LocalStored / &#64;SessionStored — Decorator API</h3>
+    <p>Annotate class fields for automatic persistence with <strong>deep mutation tracking</strong>. Nested property changes and array methods trigger saves automatically.</p>
+
+    <interactive-code language="typescript">
+      <textarea>import { LocalStored, SessionStored } from '@softwarity/store';
+
+@Component({ ... })
+export class MyComponent {
+
+  // localStorage with version-based invalidation
+  @LocalStored(1)
+  tableConfig = {
+    columns: ['name', 'age'],
+    sort: { active: 'name', direction: 'asc' },
+    pageSize: 25
+  };
+
+  // sessionStorage (no versioning, lives for the session)
+  @SessionStored()
+  filters = { search: '', category: 'all' };
+
+  // Custom storage key (instead of auto-generated ClassName.property)
+  @LocalStored(1, 'shared-config')
+  sharedConfig = { theme: 'dark' };
+}</textarea>
+    </interactive-code>
+  </article>
+
+  <!-- Deep mutation tracking -->
+  <article class="doc-section">
+    <h3>Deep mutation tracking</h3>
+    <p>The decorator wraps stored objects with proxies via <code>Object.defineProperty</code>. All nested mutations and array method calls trigger automatic saves.</p>
+    <interactive-code language="typescript">
+      <textarea>// All of these trigger an automatic save:
+this.config.sort.direction = 'desc';         // nested property
+this.config.columns.push('email');            // array push
+this.config.columns.splice(0, 1);            // array splice
+this.config.columns.reverse();               // array reverse
+this.config.columns.sort();                  // array sort
+
+// These do NOT trigger a save:
+this.config = { ... };                        // root reassignment
+this.config.columns[0] = 'email';            // direct index assignment
+// Use splice instead: this.config.columns.splice(0, 1, 'email');</textarea>
+    </interactive-code>
+  </article>
+
+  <!-- Version management -->
+  <article class="doc-section">
+    <h3>Version management</h3>
+    <p>When the schema changes, increment the version number. Old stored data is discarded and replaced with the new defaults.</p>
+    <interactive-code language="typescript">
+      <textarea>// v1: initial schema
+@LocalStored(1)
+config = { columns: ['name', 'age'], sort: 'asc' };
+
+// v2: added filter — old browser data is invalidated
+@LocalStored(2)
+config = { columns: ['name', 'age'], sort: 'asc', filter: null };</textarea>
+    </interactive-code>
+    <p>Only <code>&#64;LocalStored</code> supports versioning. <code>&#64;SessionStored</code> does not need it.</p>
+  </article>
+
+  <!-- =============================== -->
+  <!-- SIGNALS API (secondary)          -->
+  <!-- =============================== -->
+  <article class="doc-section">
+    <h3>Signals API — localSignal / sessionSignal</h3>
+    <p>Alternative API that returns a <code>StoredSignal&lt;T&gt;</code> with plain property access and <code>$prop()</code> reactive signals. Must be called in an Angular injection context.</p>
+
+    <interactive-code language="typescript">
+      <textarea>import { localSignal, sessionSignal } from '@softwarity/store';
+
+@Component({ ... })
+export class MyComponent {
+
+  // localStorage + version invalidation
+  config = localSignal(
+    { columns: ['name', 'age'], sort: 'asc' },
+    1, { id: 'table-config' }
+  );
+
+  // sessionStorage (no versioning)
+  wizard = sessionSignal(
+    { step: 1, draft: '' },
+    { id: 'wizard-state' }
+  );
+
+  // Plain property assignment — persists automatically
+  toggleSort() {
+    this.config.sort = this.config.sort === 'asc' ? 'desc' : 'asc';
+  }
+
+  // Reactive signal for templates: [value]="config.$sort()"
+}</textarea>
+    </interactive-code>
+  </article>
+
+  <!-- API Reference -->
+  <article class="doc-section">
+    <h3>API Reference</h3>
+
+    <h4>Decorators</h4>
+    <div class="api-table-wrapper">
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th>Decorator</th>
+            <th>Parameters</th>
+            <th>Storage</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>&#64;LocalStored(version, id?)</code></td>
+            <td><code>version: number</code>, <code>id?: string</code></td>
+            <td>localStorage</td>
+          </tr>
+          <tr>
+            <td><code>&#64;SessionStored(id?)</code></td>
+            <td><code>id?: string</code></td>
+            <td>sessionStorage</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Signal functions</h4>
+    <div class="api-table-wrapper">
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th>Function</th>
+            <th>Returns</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>localSignal(initial, version, opts)</code></td>
+            <td><code>StoredSignal&lt;T&gt;</code></td>
+            <td>Persisted to localStorage with version invalidation. <code>config.prop</code> for read/write, <code>config.$prop()</code> for reactive signal.</td>
+          </tr>
+          <tr>
+            <td><code>sessionSignal(initial, opts)</code></td>
+            <td><code>StoredSignal&lt;T&gt;</code></td>
+            <td>Persisted to sessionStorage. Same API as <code>localSignal</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Utilities</h4>
+    <div class="api-table-wrapper">
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th>Function</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>provideStore(userId$?)</code></td>
+            <td>Standalone provider for user-scoped storage</td>
+          </tr>
+          <tr>
+            <td><code>onStorageChange(key, cb, destroyRef?)</code></td>
+            <td>Listen for localStorage changes from other tabs</td>
+          </tr>
+          <tr>
+            <td><code>clearLocalStorage(prefix?)</code></td>
+            <td>Clear all or prefix-matching localStorage keys</td>
+          </tr>
+          <tr>
+            <td><code>clearSessionStorage(prefix?)</code></td>
+            <td>Clear all or prefix-matching sessionStorage keys</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <!-- Storage key format -->
+  <article class="doc-section">
+    <h3>Storage key format</h3>
+    <div class="api-table-wrapper">
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th>API</th>
+            <th>Without userId</th>
+            <th>With userId</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Decorators (auto)</td>
+            <td><code>ClassName.property</code></td>
+            <td><code>userId_ClassName.property</code></td>
+          </tr>
+          <tr>
+            <td>Decorators (custom id)</td>
+            <td><code>customId</code></td>
+            <td><code>userId_customId</code></td>
+          </tr>
+          <tr>
+            <td>Signals</td>
+            <td><code>options.id</code></td>
+            <td><code>userId_options.id</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <!-- Cross-tab sync -->
+  <article class="doc-section">
+    <h3>Cross-tab sync</h3>
+    <interactive-code language="typescript">
+      <textarea>import { onStorageChange } from '@softwarity/store';
+import { DestroyRef, inject } from '@angular/core';
+
+@Component({ ... })
+export class MyComponent {
+  private destroyRef = inject(DestroyRef);
+
+  ngOnInit() {
+    onStorageChange<{ theme: string }>('app-config', newValue => {
+      console.log('Changed in another tab:', newValue);
+    }, this.destroyRef); // auto-cleanup on destroy
+  }
+}</textarea>
+    </interactive-code>
+    <p><strong>Note:</strong> Only works with localStorage (<code>StorageEvent</code> spec limitation).</p>
+  </article>
+
+  <!-- Features -->
+  <article class="doc-section">
+    <h3>Features</h3>
+    <ul class="feature-list">
+      <li><strong>Decorator API</strong> — <code>&#64;LocalStored</code> / <code>&#64;SessionStored</code> with deep mutation tracking on nested objects and arrays</li>
+      <li><strong>Signals API</strong> — <code>localSignal()</code> / <code>sessionSignal()</code> returning <code>StoredSignal&lt;T&gt;</code> with plain access and <code>$prop()</code> reactive signals</li>
+      <li><strong>Version invalidation</strong> — Increment version to discard stale stored data</li>
+      <li><strong>User-scoped</strong> — Prefix storage keys with a user ID via <code>provideStore(userId$)</code></li>
+      <li><strong>Cross-tab sync</strong> — <code>onStorageChange()</code> for localStorage changes from other tabs</li>
+      <li><strong>Error resilient</strong> — Handles corrupted JSON and QuotaExceededError gracefully</li>
+      <li><strong>SSR compatible</strong> — <code>FakeStorage</code> fallback when <code>window</code> is undefined</li>
+      <li><strong>Zoneless</strong> — No dependency on zone.js</li>
+    </ul>
+  </article>
+</section>

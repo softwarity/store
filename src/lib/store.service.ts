@@ -9,7 +9,7 @@ export abstract class StoreService {
 
   static getId(userId: string | null, target: { constructor: { name: string } }, key: string, id?: string) {
     const suffix = id || `${target.constructor.name}.${key}`;
-    if (!!userId && userId.length) {
+    if (userId !== null && userId.length > 0) {
       return `${userId}_${suffix}`;
     }
     return suffix;
@@ -17,19 +17,26 @@ export abstract class StoreService {
 
   abstract getStorage(): Storage;
 
-  getUserId$(): Observable<string | null> {
-    return StoreService.userId$.pipe(share(), filter(u => u !== null));
+  getUserId$(): Observable<string> {
+    return StoreService.userId$.pipe(
+      filter((u): u is string => u !== null),
+      share()
+    );
   }
 
   loadCfg(cfg: any): any {
     let currentCfg: any = cfg;
     const entry: string | null = this.getStorage().getItem(`${cfg.id}`);
-    if (!!entry) {
-      const fromStore: any = JSON.parse(entry);
-      if (currentCfg.version === fromStore.version) {
-        currentCfg = fromStore;
-      } else {
-        this.saveCfg(currentCfg);
+    if (entry !== null) {
+      try {
+        const fromStore: any = JSON.parse(entry);
+        if (currentCfg.version === undefined || currentCfg.version === fromStore.version) {
+          currentCfg = fromStore;
+        } else {
+          this.saveCfg(currentCfg);
+        }
+      } catch {
+        this.getStorage().removeItem(`${cfg.id}`);
       }
     }
     const res = this.transformObject(currentCfg);
@@ -45,25 +52,20 @@ export abstract class StoreService {
       return obj;
     }
     const res: any = {};
-    const innerObject = {};
+    const innerObject: Record<string, any> = {};
     Object.keys(obj).forEach((key: string) => {
       if (key === 'version' || key === 'id') { // readonly
-        // @ts-ignore
         innerObject[key] = obj[key];
         Object.defineProperty(res, key, {
           enumerable: true,
-        // @ts-ignore
-        get: () => innerObject[key]
+          get: () => innerObject[key]
         });
       } else {
-        // @ts-ignore
         innerObject[key] = this.transform(obj[key], root || res);
         Object.defineProperty(res, key, {
           enumerable: true,
-        // @ts-ignore
-        get: () => innerObject[key],
+          get: () => innerObject[key],
           set: (v: any) => {
-            // @ts-ignore
             innerObject[key] = this.transform(v, root || res);
             this.saveCfg(root || res);
           }
@@ -89,8 +91,8 @@ export abstract class StoreService {
     const transformArr = arr.map(item => (item instanceof Array ? transformArray(item, root) : transformObject(item, root)));
     ['push', 'pop', 'shift', 'unshift', 'copyWithin', 'fill', 'reverse', 'sort', 'splice'].forEach((method: string) => {
       (transformArr as any)[method] = (...args: any) => {
-        // @ts-ignore
-        const res = (Array.prototype[method]).bind(transformArr)(...args);
+        const original = Array.prototype[method as keyof typeof Array.prototype] as Function;
+        const res = original.apply(transformArr, args);
         this.saveCfg(root);
         return res;
       };
@@ -99,7 +101,11 @@ export abstract class StoreService {
   }
 
   private saveCfg(root: any) {
-    this.getStorage().setItem(`${root.id}`, JSON.stringify(this.toJson(root)));
+    try {
+      this.getStorage().setItem(`${root.id}`, JSON.stringify(this.toJson(root)));
+    } catch (e) {
+      console.warn(`@softwarity/store: Failed to save (key: ${root.id}).`, e);
+    }
   }
 
   private toJson(ori: any, ...excludes: string[]) {
@@ -123,7 +129,7 @@ export abstract class StoreService {
   }
 
   private addJson(obj: any, key: string, value: any) {
-    obj[key] = !!value ? this.toJson(value) : value;
+    obj[key] = (value !== null && value !== undefined) ? this.toJson(value) : value;
     return obj;
   }
 }

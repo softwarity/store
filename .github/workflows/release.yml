@@ -3,17 +3,17 @@ run-name: ${{ github.actor }} run build on ${{ github.repository }}
 on:
   workflow_dispatch:
 jobs:
-    create-release:
-        runs-on: ubuntu-latest
-        steps:
-        - uses: actions/checkout@v3
-          with:
-            token: ${{ secrets.PAT_TOKEN }} # Ceci est necessaire car l'utilisateur par default du workflow, ne DECLENCHE PAS les actions
-        - uses: actions/setup-node@v3
-        - run: git config user.name "$GITHUB_ACTOR"
-        - run: git config user.email ""
-        - run: npm version patch
-        - run: git push --all
-        - run: git push --tags
-      
-        
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: git config user.name "$GITHUB_ACTOR"
+      - run: git config user.email ""
+      - run: npm version patch
+      - run: git push --all
+      - run: git push --tags

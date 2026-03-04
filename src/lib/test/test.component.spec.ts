@@ -1,4 +1,4 @@
-import {async, ComponentFixture, inject, TestBed} from '@angular/core/testing';
+import {ComponentFixture, inject, TestBed} from '@angular/core/testing';
 
 import {TestComponent} from './test.component';
 import {USER_ID} from '../common';
@@ -9,26 +9,24 @@ describe('Test LocalStored', () => {
   let component: TestComponent;
   let fixture: ComponentFixture<TestComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [],
-      declarations: [TestComponent],
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [TestComponent],
       providers: [
         {provide: USER_ID, useFactory: () => new BehaviorSubject('USER')}
       ]
-    }).compileComponents().then(() => {
-    });
-  }));
+    }).compileComponents();
+  });
 
   beforeEach(inject([USER_ID], (userId$: Observable<string>) => {
     userId$.subscribe(u => StoreService.userId$.next(u));
   }));
 
-  beforeEach(async(() => {
+  beforeEach(() => {
     fixture = TestBed.createComponent(TestComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-  }));
+  });
 
 
   it('Test LocalStored', () => {
@@ -42,26 +40,24 @@ describe('Test SessionStored', () => {
   let component: TestComponent;
   let fixture: ComponentFixture<TestComponent>;
 
-  beforeEach((() => {
-    TestBed.configureTestingModule({
-      imports: [],
-      declarations: [TestComponent],
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [TestComponent],
       providers: [
         {provide: USER_ID, useFactory: () => new BehaviorSubject('USER')}
       ]
-    }).compileComponents().then(() => {
-    });
-  }));
+    }).compileComponents();
+  });
 
   beforeEach(inject([USER_ID], (userId$: Observable<string>) => {
     userId$.subscribe((u: string) => StoreService.userId$.next(u));
   }));
 
-  beforeEach(async(() => {
+  beforeEach(() => {
     fixture = TestBed.createComponent(TestComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-  }));
+  });
 
 
   it('Test SessionStored', () => {
@@ -70,5 +66,51 @@ describe('Test SessionStored', () => {
     expect(component.session.foo).toEqual(6);
     expect(stored.foo).toEqual(6);
     sessionStorage.clear();
+  });
+
+  it('SessionStored deep nested mutation persists', () => {
+    component.session.foo = 10;
+    const stored = JSON.parse(sessionStorage.getItem('USER_test') || '');
+    expect(stored.foo).toEqual(10);
+    sessionStorage.clear();
+  });
+});
+
+describe('Test LocalStored reads pre-existing storage', () => {
+  let component: TestComponent;
+  let fixture: ComponentFixture<TestComponent>;
+
+  beforeEach(async () => {
+    // Pre-populate localStorage with a previously saved value (including id, as saveCfg does)
+    localStorage.setItem('USER_test0', JSON.stringify({version: 1, id: 'USER_test0', foo: 42}));
+
+    await TestBed.configureTestingModule({
+      imports: [TestComponent],
+      providers: [
+        {provide: USER_ID, useFactory: () => new BehaviorSubject('USER')}
+      ]
+    }).compileComponents();
+  });
+
+  beforeEach(inject([USER_ID], (userId$: Observable<string>) => {
+    userId$.subscribe(u => StoreService.userId$.next(u));
+  }));
+
+  beforeEach(() => {
+    fixture = TestBed.createComponent(TestComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  afterEach(() => localStorage.clear());
+
+  it('should load previously persisted value from localStorage', () => {
+    expect(component.local.foo).toEqual(42);
+  });
+
+  it('should update persisted value after mutation', () => {
+    component.local.foo = 99;
+    const stored = JSON.parse(localStorage.getItem('USER_test0') || '');
+    expect(stored.foo).toEqual(99);
   });
 });

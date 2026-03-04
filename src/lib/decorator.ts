@@ -4,8 +4,8 @@ export function SessionStored(id?: string) {
   const sessionService: SessionStoreService = new SessionStoreService();
   return (target: any, key: string) => {
     const value = {data: undefined};
-    sessionService.getUserId$().subscribe((uid: string | null) => {
-      defineProperty(sessionService, value, uid, target, key, NaN, id);
+    sessionService.getUserId$().subscribe((uid: string) => {
+      defineProperty(sessionService, value, uid, target, key, undefined, id);
     });
   };
 }
@@ -14,7 +14,7 @@ export function LocalStored(version: number, id?: string) {
   const localService: LocalStoreService = new LocalStoreService();
   return (target: any, key: string) => {
     const value = {data: undefined};
-    localService.getUserId$().subscribe((uid: string | null) => {
+    localService.getUserId$().subscribe((uid: string) => {
       defineProperty(localService, value, uid, target, key, version, id);
     });
   };
@@ -22,8 +22,9 @@ export function LocalStored(version: number, id?: string) {
 
 
 function defineProperty(storeService: LocalStoreService | SessionStoreService, value: { data: any },
-                        uid: string | null, target: any, key: string, version: number, id?: string) {
+                        uid: string | null, target: any, key: string, version: number | undefined, id?: string) {
   const innerValue = value;
+  innerValue.data = undefined;
   const ident = StoreService.getId(uid, target, key, id);
   Object.defineProperty(target, key, {
     configurable: true,
