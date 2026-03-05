@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,9 +14,21 @@ jobs:
     name: Build, Publish & Release
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG=$(git ls-remote --tags --sort=-v:refname origin 'refs/tags/v*' | head -1 | sed 's|.*refs/tags/||')
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ steps.tag.outputs.tag }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -32,15 +45,28 @@ jobs:
       - name: Test
         run: npm run test:ci
 
+      - name: Check if version already published
+        id: check
+        run: |
+          VERSION=${{ steps.tag.outputs.version }}
+          if npm view @softwarity/store@$VERSION version 2>/dev/null; then
+            echo "published=true" >> $GITHUB_OUTPUT
+            echo "Version $VERSION already published on NPM, skipping."
+          else
+            echo "published=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to NPM
+        if: steps.check.outputs.published == 'false'
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           npm publish dist/
 
       - name: Extract release notes
+        if: steps.check.outputs.published == 'false'
         id: notes
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${{ steps.tag.outputs.version }}
           # Extract the section for this version from RELEASE_NOTES.md
           NOTES=$(awk "/^## ${VERSION}$/,/^---$/" RELEASE_NOTES.md | head -n -1 | tail -n +2)
           if [ -z "$NOTES" ]; then
@@ -52,8 +78,10 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        if: steps.check.outputs.published == 'false'
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.tag.outputs.tag }}
           body: ${{ steps.notes.outputs.body }}
           draft: false
           prerelease: false
