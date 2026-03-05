@@ -4,6 +4,10 @@
 
 ---
 
+## 1.19.1
+
+---
+
 ## 1.19.0
 
 ### Native Proxy deep tracking
