@@ -1,0 +1,45 @@
+name: Create/Update GitHub Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create/Update GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve latest tag
+        id: tag
+        run: |
+          TAG=$(git ls-remote --tags --sort=-v:refname https://github.com/${{ github.repository }} 'refs/tags/v*' | head -1 | sed 's|.*refs/tags/||')
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          echo "Resolved tag: $TAG"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Extract release notes
+        id: notes
+        run: |
+          VERSION=${{ steps.tag.outputs.version }}
+          NOTES=$(awk "/^## ${VERSION}$/,/^---$/" RELEASE_NOTES.md | head -n -1 | tail -n +2)
+          if [ -z "$NOTES" ]; then
+            NOTES="Release v${VERSION}"
+          fi
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          prerelease: false

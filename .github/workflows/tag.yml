@@ -1,4 +1,4 @@
-name: Publish to NPM & GitHub Release
+name: Publish to NPM
 
 on:
   push:
@@ -6,19 +6,16 @@ on:
       - 'v*'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   publish:
-    name: Build, Publish & Release
+    name: Build, Test & Publish
     runs-on: ubuntu-latest
     steps:
       - name: Resolve tag
         id: tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG=$(git ls-remote --tags --sort=-v:refname origin 'refs/tags/v*' | head -1 | sed 's|.*refs/tags/||')
+            TAG=$(git ls-remote --tags --sort=-v:refname https://github.com/${{ github.repository }} 'refs/tags/v*' | head -1 | sed 's|.*refs/tags/||')
           else
             TAG=${GITHUB_REF#refs/tags/}
           fi
@@ -61,27 +58,3 @@ jobs:
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           npm publish dist/
-
-      - name: Extract release notes
-        if: steps.check.outputs.published == 'false'
-        id: notes
-        run: |
-          VERSION=${{ steps.tag.outputs.version }}
-          # Extract the section for this version from RELEASE_NOTES.md
-          NOTES=$(awk "/^## ${VERSION}$/,/^---$/" RELEASE_NOTES.md | head -n -1 | tail -n +2)
-          if [ -z "$NOTES" ]; then
-            NOTES="Release v${VERSION}"
-          fi
-          # Use delimiter for multiline output
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        if: steps.check.outputs.published == 'false'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          body: ${{ steps.notes.outputs.body }}
-          draft: false
-          prerelease: false
