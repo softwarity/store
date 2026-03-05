@@ -1,11 +1,21 @@
-import {Injectable} from '@angular/core';
-import {BehaviorSubject, Observable} from 'rxjs';
-import {filter, share} from 'rxjs/operators';
+import {Injectable, signal, WritableSignal} from '@angular/core';
 import {FakeStorage} from './fake-storage';
 
 export abstract class StoreService {
 
-  static userId$: BehaviorSubject<string | null> = new BehaviorSubject<string | null>(null);
+  static userId: WritableSignal<string | null> = signal(null);
+
+  private static _userIdListeners = new Set<(userId: string | null) => void>();
+
+  static onUserIdChange(cb: (userId: string | null) => void): () => void {
+    StoreService._userIdListeners.add(cb);
+    return () => StoreService._userIdListeners.delete(cb);
+  }
+
+  static _notifyUserIdListeners(): void {
+    const uid = StoreService.userId();
+    StoreService._userIdListeners.forEach(cb => cb(uid));
+  }
 
   static getId(userId: string | null, target: { constructor: { name: string } }, key: string, id?: string) {
     const suffix = id || `${target.constructor.name}.${key}`;
@@ -17,19 +27,17 @@ export abstract class StoreService {
 
   abstract getStorage(): Storage;
 
-  getUserId$(): Observable<string> {
-    return StoreService.userId$.pipe(
-      filter((u): u is string => u !== null),
-      share()
-    );
-  }
-
   loadCfg(cfg: any): any {
     let currentCfg: any = cfg;
     const entry: string | null = this.getStorage().getItem(`${cfg.id}`);
     if (entry !== null) {
       try {
         const fromStore: any = JSON.parse(entry);
+        // Remap _schemaVersion → version for in-memory use
+        if (fromStore._schemaVersion !== undefined) {
+          fromStore.version = fromStore._schemaVersion;
+          delete fromStore._schemaVersion;
+        }
         if (currentCfg.version === undefined || currentCfg.version === fromStore.version) {
           currentCfg = fromStore;
         } else {
@@ -102,7 +110,13 @@ export abstract class StoreService {
 
   private saveCfg(root: any) {
     try {
-      this.getStorage().setItem(`${root.id}`, JSON.stringify(this.toJson(root)));
+      const json = this.toJson(root);
+      // Rename version → _schemaVersion for storage
+      if (json && json.version !== undefined) {
+        json._schemaVersion = json.version;
+        delete json.version;
+      }
+      this.getStorage().setItem(`${root.id}`, JSON.stringify(json));
     } catch (e) {
       console.warn(`@softwarity/store: Failed to save (key: ${root.id}).`, e);
     }

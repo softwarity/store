@@ -10,11 +10,12 @@ export {LocalStoreService, SessionStoreService, StoreService} from './lib/store.
 export {StoreModule} from './lib/store.module';
 // Standalone setup
 export {provideStore} from './lib/provide-store';
+export type {StoreConfig} from './lib/provide-store';
 // DI tokens
 export {USER_ID} from './lib/common';
-// Signals API
-export {localSignal, sessionSignal} from './lib/stored-signal';
-export type {StoredSignal, StoredSignalOptions} from './lib/stored-signal';
+// Stored API (deep-tracked, with $prop signals)
+export {localStored, sessionStored} from './lib/stored-signal';
+export type {StoredSignal, StoredOptions} from './lib/stored-signal';
 // Cross-tab sync
 export {onStorageChange} from './lib/cross-tab-sync';
 export type {CrossTabSyncHandle} from './lib/cross-tab-sync';

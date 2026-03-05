@@ -1,6 +1,5 @@
-import {DestroyRef, Inject, NgModule} from '@angular/core';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {BehaviorSubject, Observable} from 'rxjs';
+import {Inject, NgModule, Signal, effect, signal} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {USER_ID} from './common';
 import {StoreService} from './store.service';
 import {CommonModule} from '@angular/common';
@@ -13,12 +12,24 @@ import {CommonModule} from '@angular/common';
 })
 export class StoreModule {
   constructor(
-    @Inject(USER_ID) userId$: Observable<string>,
-    destroyRef: DestroyRef
+    @Inject(USER_ID) userIdInput: Signal<string | null> | any
   ) {
-    userId$.pipe(takeUntilDestroyed(destroyRef)).subscribe(u => StoreService.userId$.next(u));
+    // Duck-type: if it has .subscribe, it's an Observable (legacy)
+    let sig: Signal<string | null>;
+    if (typeof userIdInput?.subscribe === 'function') {
+      sig = toSignal(userIdInput, {initialValue: null});
+    } else {
+      sig = userIdInput as Signal<string | null>;
+    }
+    effect(() => {
+      const uid = sig();
+      StoreService.userId.set(uid);
+      StoreService._notifyUserIdListeners();
+    });
   }
 }
-export function defaultUserIdFactory() {
-  return new BehaviorSubject('');
+
+/** @deprecated Use provideStore() with StoreConfig instead. */
+export function defaultUserIdFactory(): Signal<string | null> {
+  return signal('');
 }

@@ -1,38 +1,77 @@
-import {LocalStoreService, SessionStoreService, StoreService} from './store.service';
+import {StoreService} from './store.service';
+import {createTrackedProxy, getLocalStorage, getSessionStorage, toPlain, StoredSignal} from './stored-signal';
 
-export function SessionStored(id?: string) {
-  const sessionService: SessionStoreService = new SessionStoreService();
+function loadFromDecoratorStorage<T>(storage: Storage, key: string, initialValue: T, version?: number): T {
+  const entry = storage.getItem(key);
+  if (entry === null) {
+    return initialValue;
+  }
+  try {
+    const parsed = JSON.parse(entry);
+    if (version === undefined || version === parsed._schemaVersion) {
+      const {_schemaVersion: _, ...data} = parsed;
+      return data as T;
+    }
+    return initialValue;
+  } catch {
+    storage.removeItem(key);
+    return initialValue;
+  }
+}
+
+function saveToDecoratorStorage<T>(storage: Storage, key: string, value: T, version?: number): void {
+  try {
+    const toStore = version !== undefined ? {...value, _schemaVersion: version} : {...value};
+    storage.setItem(key, JSON.stringify(toStore));
+  } catch (e) {
+    console.warn(`@softwarity/store: Failed to save (key: ${key}).`, e);
+  }
+}
+
+function storedDecorator(storage: Storage, version: number | undefined, id?: string) {
   return (target: any, key: string) => {
-    const value = {data: undefined};
-    sessionService.getUserId$().subscribe((uid: string) => {
-      defineProperty(sessionService, value, uid, target, key, undefined, id);
+    let stored: {proxy: StoredSignal<any>; reload: (v: any) => void} | undefined;
+    let currentKey = '';
+    let initialValue: any;
+
+    Object.defineProperty(target, key, {
+      configurable: true,
+      set: (val: any) => {
+        initialValue = val;
+        if (!currentKey) {
+          const uid = StoreService.userId();
+          currentKey = StoreService.getId(uid, target, key, id);
+        }
+        const loaded = loadFromDecoratorStorage(storage, currentKey, val, version);
+        const {proxy, reload} = createTrackedProxy(loaded, (plainValue) => {
+          saveToDecoratorStorage(storage, currentKey, plainValue, version);
+        });
+        stored = {proxy, reload};
+        // Persist initial/loaded value
+        saveToDecoratorStorage(storage, currentKey, toPlain(proxy), version);
+      },
+      get: () => stored?.proxy
+    });
+
+    // React to userId changes
+    StoreService.onUserIdChange(uid => {
+      const newKey = StoreService.getId(uid, target, key, id);
+      if (stored && newKey !== currentKey) {
+        currentKey = newKey;
+        const loaded = loadFromDecoratorStorage(storage, currentKey, initialValue, version);
+        stored.reload(loaded);
+        saveToDecoratorStorage(storage, currentKey, toPlain(stored.proxy), version);
+      } else {
+        currentKey = newKey;
+      }
     });
   };
 }
 
 export function LocalStored(version: number, id?: string) {
-  const localService: LocalStoreService = new LocalStoreService();
-  return (target: any, key: string) => {
-    const value = {data: undefined};
-    localService.getUserId$().subscribe((uid: string) => {
-      defineProperty(localService, value, uid, target, key, version, id);
-    });
-  };
+  return storedDecorator(getLocalStorage(), version, id);
 }
 
-
-function defineProperty(storeService: LocalStoreService | SessionStoreService, value: { data: any },
-                        uid: string | null, target: any, key: string, version: number | undefined, id?: string) {
-  const innerValue = value;
-  innerValue.data = undefined;
-  const ident = StoreService.getId(uid, target, key, id);
-  Object.defineProperty(target, key, {
-    configurable: true,
-    set: (val: any) => {
-      innerValue.data = storeService.loadCfg({...val, id: ident, version});
-    },
-    get: () => {
-      return innerValue.data;
-    }
-  });
+export function SessionStored(id?: string) {
+  return storedDecorator(getSessionStorage(), undefined, id);
 }

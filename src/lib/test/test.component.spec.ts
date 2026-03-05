@@ -1,26 +1,29 @@
-import {ComponentFixture, inject, TestBed} from '@angular/core/testing';
+import {ComponentFixture, TestBed} from '@angular/core/testing';
 
 import {TestComponent} from './test.component';
-import {USER_ID} from '../common';
-import {BehaviorSubject, Observable} from 'rxjs';
 import {StoreService} from '../store.service';
+import {provideStore} from '../provide-store';
+import {signal} from '@angular/core';
 
 describe('Test LocalStored', () => {
   let component: TestComponent;
   let fixture: ComponentFixture<TestComponent>;
 
   beforeEach(async () => {
+    StoreService.userId.set(null);
     await TestBed.configureTestingModule({
       imports: [TestComponent],
       providers: [
-        {provide: USER_ID, useFactory: () => new BehaviorSubject('USER')}
+        provideStore({userId: () => signal('USER')})
       ]
     }).compileComponents();
   });
 
-  beforeEach(inject([USER_ID], (userId$: Observable<string>) => {
-    userId$.subscribe(u => StoreService.userId$.next(u));
-  }));
+  beforeEach(() => {
+    TestBed.flushEffects();
+  });
+
+  afterEach(() => localStorage.clear());
 
   beforeEach(() => {
     fixture = TestBed.createComponent(TestComponent);
@@ -35,23 +38,36 @@ describe('Test LocalStored', () => {
     expect(component.local.foo).toEqual(6);
     expect(stored.foo).toEqual(6);
   });
+
+  it('should expose $-prefixed signal on decorated property', () => {
+    expect((component.local as any).$foo()).toEqual(5);
+    component.local.foo = 42;
+    expect((component.local as any).$foo()).toEqual(42);
+  });
+
+  it('should track direct array index assignment via decorator', () => {
+    component.localArr.items[0] = 'z';
+    const stored = JSON.parse(localStorage.getItem('USER_test-arr') || '{}');
+    expect(stored.items[0]).toBe('z');
+  });
 });
 describe('Test SessionStored', () => {
   let component: TestComponent;
   let fixture: ComponentFixture<TestComponent>;
 
   beforeEach(async () => {
+    StoreService.userId.set(null);
     await TestBed.configureTestingModule({
       imports: [TestComponent],
       providers: [
-        {provide: USER_ID, useFactory: () => new BehaviorSubject('USER')}
+        provideStore({userId: () => signal('USER')})
       ]
     }).compileComponents();
   });
 
-  beforeEach(inject([USER_ID], (userId$: Observable<string>) => {
-    userId$.subscribe((u: string) => StoreService.userId$.next(u));
-  }));
+  beforeEach(() => {
+    TestBed.flushEffects();
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(TestComponent);
@@ -82,19 +98,20 @@ describe('Test LocalStored reads pre-existing storage', () => {
 
   beforeEach(async () => {
     // Pre-populate localStorage with a previously saved value (including id, as saveCfg does)
-    localStorage.setItem('USER_test0', JSON.stringify({version: 1, id: 'USER_test0', foo: 42}));
+    localStorage.setItem('USER_test0', JSON.stringify({_schemaVersion: 1, id: 'USER_test0', foo: 42}));
 
+    StoreService.userId.set(null);
     await TestBed.configureTestingModule({
       imports: [TestComponent],
       providers: [
-        {provide: USER_ID, useFactory: () => new BehaviorSubject('USER')}
+        provideStore({userId: () => signal('USER')})
       ]
     }).compileComponents();
   });
 
-  beforeEach(inject([USER_ID], (userId$: Observable<string>) => {
-    userId$.subscribe(u => StoreService.userId$.next(u));
-  }));
+  beforeEach(() => {
+    TestBed.flushEffects();
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(TestComponent);

@@ -16,13 +16,9 @@
     <h4>Standalone (recommended)</h4>
     <interactive-code language="typescript">
       <textarea>import { provideStore } from '@softwarity/store';
-import { BehaviorSubject } from 'rxjs';
-
-// Optional: provide a userId stream for user-scoped storage
-const userId$ = new BehaviorSubject<string>('');
 
 export const appConfig = {
-  providers: [provideStore(userId$)]
+  providers: [provideStore()]
 };</textarea>
     </interactive-code>
 
@@ -31,6 +27,38 @@ export const appConfig = {
       <textarea>import { StoreModule } from '@softwarity/store';
 
 @NgModule({ imports: [StoreModule] })
+export class AppModule {}</textarea>
+    </interactive-code>
+  </article>
+
+  <!-- User-scoped storage -->
+  <article class="doc-section">
+    <h3>User-scoped storage</h3>
+    <p>To prefix all storage keys with a user ID, pass a signal factory. This isolates data per user (e.g. after login).</p>
+
+    <h4>Standalone</h4>
+    <interactive-code language="typescript">
+      <textarea>import { provideStore } from '@softwarity/store';
+import { inject } from '@angular/core';
+
+export const appConfig = {
+  providers: [
+    provideStore({ userId: () => inject(AuthService).userId })
+  ]
+};</textarea>
+    </interactive-code>
+
+    <h4>Module-based (legacy)</h4>
+    <interactive-code language="typescript">
+      <textarea>import { StoreModule, USER_ID } from '@softwarity/store';
+import { inject } from '@angular/core';
+
+@NgModule({
+  imports: [StoreModule],
+  providers: [
+    { provide: USER_ID, useFactory: () => inject(AuthService).userId }
+  ]
+})
 export class AppModule {}</textarea>
     </interactive-code>
   </article>
@@ -48,7 +76,8 @@ export class AppModule {}</textarea>
 @Component({ ... })
 export class MyComponent {
 
-  // localStorage with version-based invalidation
+  // localStorage — schema version 1
+  // Increment to discard stale data when the schema changes.
   @LocalStored(1)
   tableConfig = {
     columns: ['name', 'age'],
@@ -70,7 +99,7 @@ export class MyComponent {
   <!-- Deep mutation tracking -->
   <article class="doc-section">
     <h3>Deep mutation tracking</h3>
-    <p>The decorator wraps stored objects with proxies via <code>Object.defineProperty</code>. All nested mutations and array method calls trigger automatic saves.</p>
+    <p>The decorator wraps stored objects with native <code>Proxy</code>. All nested mutations, array methods, direct index assignments, and new properties trigger automatic saves.</p>
     <interactive-code language="typescript">
       <textarea>// All of these trigger an automatic save:
 this.config.sort.direction = 'desc';         // nested property
@@ -78,61 +107,66 @@ this.config.columns.push('email');            // array push
 this.config.columns.splice(0, 1);            // array splice
 this.config.columns.reverse();               // array reverse
 this.config.columns.sort();                  // array sort
-
-// These do NOT trigger a save:
-this.config = { ... };                        // root reassignment
 this.config.columns[0] = 'email';            // direct index assignment
-// Use splice instead: this.config.columns.splice(0, 1, 'email');</textarea>
+this.config.sort.newProp = 'value';          // new property on object
+
+// This does NOT trigger a save:
+this.config = { ... };                        // root reassignment</textarea>
     </interactive-code>
   </article>
 
-  <!-- Version management -->
+  <!-- Schema version management -->
   <article class="doc-section">
-    <h3>Version management</h3>
-    <p>When the schema changes, increment the version number. Old stored data is discarded and replaced with the new defaults.</p>
+    <h3>Schema version management</h3>
+    <p>When the schema changes, increment the schema version. Old stored data is discarded and replaced with the new defaults.</p>
     <interactive-code language="typescript">
-      <textarea>// v1: initial schema
+      <textarea>// Schema version 1: initial schema
 @LocalStored(1)
 config = { columns: ['name', 'age'], sort: 'asc' };
 
-// v2: added filter — old browser data is invalidated
+// Schema version 2: added filter — stale browser data is discarded
 @LocalStored(2)
 config = { columns: ['name', 'age'], sort: 'asc', filter: null };</textarea>
     </interactive-code>
-    <p>Only <code>&#64;LocalStored</code> supports versioning. <code>&#64;SessionStored</code> does not need it.</p>
+    <p>Only <code>&#64;LocalStored</code> and <code>localStored()</code> support schema versioning. <code>&#64;SessionStored</code> and <code>sessionStored()</code> do not need it (data is short-lived).</p>
   </article>
 
   <!-- =============================== -->
-  <!-- SIGNALS API (secondary)          -->
+  <!-- STORED API (deep-tracked)       -->
   <!-- =============================== -->
   <article class="doc-section">
-    <h3>Signals API — localSignal / sessionSignal</h3>
-    <p>Alternative API that returns a <code>StoredSignal&lt;T&gt;</code> with plain property access and <code>$prop()</code> reactive signals. Must be called in an Angular injection context.</p>
+    <h3>Stored API — localStored / sessionStored</h3>
+    <p>Same deep mutation tracking as decorators, but <strong>without annotations</strong>. Returns a <code>StoredSignal&lt;T&gt;</code> with plain property access, deep tracking on nested objects and arrays, and <code>$prop()</code> reactive signals for templates.</p>
 
     <interactive-code language="typescript">
-      <textarea>import { localSignal, sessionSignal } from '@softwarity/store';
+      <textarea>import { localStored, sessionStored } from '@softwarity/store';
 
 @Component({ ... })
 export class MyComponent {
 
-  // localStorage + version invalidation
-  config = localSignal(
-    { columns: ['name', 'age'], sort: 'asc' },
-    1, { id: 'table-config' }
+  // localStorage + deep tracking + schema versioning
+  // Increment version to discard stale data when the schema changes.
+  config = localStored(
+    { columns: ['name', 'age'], sort: { active: 'name', direction: 'asc' } },
+    { id: 'table-config', version: 1 }
   );
 
-  // sessionStorage (no versioning)
-  wizard = sessionSignal(
+  // sessionStorage + deep tracking (no schema versioning needed)
+  wizard = sessionStored(
     { step: 1, draft: '' },
     { id: 'wizard-state' }
   );
 
-  // Plain property assignment — persists automatically
-  toggleSort() {
-    this.config.sort = this.config.sort === 'asc' ? 'desc' : 'asc';
-  }
+  // Deep mutations tracked automatically:
+  this.config.sort.direction = 'desc';       // saves!
+  this.config.columns.push('email');          // saves!
+  this.config.columns.splice(0, 1);          // saves!
 
-  // Reactive signal for templates: [value]="config.$sort()"
+  // Plain assignment:
+  this.config.columns = ['name', 'email'];   // saves!
+
+  // Reactive signal for templates:
+  // [pageSize]="config.$columns()"
 }</textarea>
     </interactive-code>
   </article>
@@ -153,8 +187,8 @@ export class MyComponent {
         </thead>
         <tbody>
           <tr>
-            <td><code>&#64;LocalStored(version, id?)</code></td>
-            <td><code>version: number</code>, <code>id?: string</code></td>
+            <td><code>&#64;LocalStored(schemaVersion, id?)</code></td>
+            <td><code>schemaVersion: number</code>, <code>id?: string</code></td>
             <td>localStorage</td>
           </tr>
           <tr>
@@ -166,7 +200,7 @@ export class MyComponent {
       </table>
     </div>
 
-    <h4>Signal functions</h4>
+    <h4>Stored functions</h4>
     <div class="api-table-wrapper">
       <table class="api-table">
         <thead>
@@ -178,14 +212,14 @@ export class MyComponent {
         </thead>
         <tbody>
           <tr>
-            <td><code>localSignal(initial, version, opts)</code></td>
+            <td><code>localStored(initial, {{ '{' }}id, version{{ '}' }})</code></td>
             <td><code>StoredSignal&lt;T&gt;</code></td>
-            <td>Persisted to localStorage with version invalidation. <code>config.prop</code> for read/write, <code>config.$prop()</code> for reactive signal.</td>
+            <td>localStorage + deep mutation tracking + schema versioning + <code>$prop()</code> signals.</td>
           </tr>
           <tr>
-            <td><code>sessionSignal(initial, opts)</code></td>
+            <td><code>sessionStored(initial, {{ '{' }}id{{ '}' }})</code></td>
             <td><code>StoredSignal&lt;T&gt;</code></td>
-            <td>Persisted to sessionStorage. Same API as <code>localSignal</code>.</td>
+            <td>sessionStorage + deep mutation tracking + <code>$prop()</code> signals.</td>
           </tr>
         </tbody>
       </table>
@@ -202,8 +236,8 @@ export class MyComponent {
         </thead>
         <tbody>
           <tr>
-            <td><code>provideStore(userId$?)</code></td>
-            <td>Standalone provider for user-scoped storage</td>
+            <td><code>provideStore(config?)</code></td>
+            <td>Standalone provider. <code>config.userId</code>: factory returning a <code>Signal&lt;string | null&gt;</code> for user-scoped storage</td>
           </tr>
           <tr>
             <td><code>onStorageChange(key, cb, destroyRef?)</code></td>
@@ -246,7 +280,7 @@ export class MyComponent {
             <td><code>userId_customId</code></td>
           </tr>
           <tr>
-            <td>Signals</td>
+            <td>Stored functions (<code>localStored</code>/<code>sessionStored</code>)</td>
             <td><code>options.id</code></td>
             <td><code>userId_options.id</code></td>
           </tr>
@@ -280,14 +314,14 @@ export class MyComponent {
   <article class="doc-section">
     <h3>Features</h3>
     <ul class="feature-list">
-      <li><strong>Decorator API</strong> — <code>&#64;LocalStored</code> / <code>&#64;SessionStored</code> with deep mutation tracking on nested objects and arrays</li>
-      <li><strong>Signals API</strong> — <code>localSignal()</code> / <code>sessionSignal()</code> returning <code>StoredSignal&lt;T&gt;</code> with plain access and <code>$prop()</code> reactive signals</li>
-      <li><strong>Version invalidation</strong> — Increment version to discard stale stored data</li>
-      <li><strong>User-scoped</strong> — Prefix storage keys with a user ID via <code>provideStore(userId$)</code></li>
+      <li><strong>Decorator API</strong> — <code>&#64;LocalStored</code> / <code>&#64;SessionStored</code> with deep mutation tracking on nested objects and arrays, plus <code>$prop()</code> reactive signals</li>
+      <li><strong>Stored API</strong> — <code>localStored()</code> / <code>sessionStored()</code> — same deep mutation tracking and <code>$prop()</code> signals as decorators, but without annotations</li>
+      <li><strong>Schema versioning</strong> — Increment the schema version to discard stale data when the schema changes</li>
+      <li><strong>User-scoped</strong> — Prefix storage keys with a user ID via <code>provideStore({{ '{' }} userId: () => mySignal {{ '}' }})</code></li>
       <li><strong>Cross-tab sync</strong> — <code>onStorageChange()</code> for localStorage changes from other tabs</li>
       <li><strong>Error resilient</strong> — Handles corrupted JSON and QuotaExceededError gracefully</li>
       <li><strong>SSR compatible</strong> — <code>FakeStorage</code> fallback when <code>window</code> is undefined</li>
-      <li><strong>Zoneless</strong> — No dependency on zone.js</li>
+      <li><strong><s>Zoneless</s></strong> — No dependency on zone.js</li>
     </ul>
   </article>
 </section>

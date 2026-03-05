@@ -1,3 +1,4 @@
+import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {BehaviorSubject} from 'rxjs';
 import {StoreService} from './store.service';
@@ -5,35 +6,57 @@ import {provideStore} from './provide-store';
 
 describe('provideStore', () => {
   beforeEach(() => {
-    StoreService.userId$ = new BehaviorSubject<string | null>(null);
+    StoreService.userId.set(null);
   });
 
-  it('should wire userId$ to StoreService.userId$', () => {
+  it('should wire signal-based config to StoreService.userId', () => {
+    const userSig = signal<string | null>('alice');
+
+    TestBed.configureTestingModule({
+      providers: [provideStore({userId: () => userSig})]
+    });
+
+    // Force initializer to run
+    TestBed.flushEffects();
+
+    expect(StoreService.userId()).toBe('alice');
+  });
+
+  it('should react to signal changes', () => {
+    const userSig = signal<string | null>('alice');
+
+    TestBed.configureTestingModule({
+      providers: [provideStore({userId: () => userSig})]
+    });
+
+    TestBed.flushEffects();
+    expect(StoreService.userId()).toBe('alice');
+
+    userSig.set('bob');
+    TestBed.flushEffects();
+    expect(StoreService.userId()).toBe('bob');
+  });
+
+  it('should work without config', () => {
+    TestBed.configureTestingModule({
+      providers: [provideStore()]
+    });
+
+    expect(StoreService.userId()).toBeNull();
+  });
+
+  it('should support legacy Observable overload', () => {
     const userId$ = new BehaviorSubject<string>('alice');
 
     TestBed.configureTestingModule({
       providers: [provideStore(userId$)]
     });
 
-    // Force initializer to run
-    TestBed.inject(StoreService.userId$.constructor as any, undefined, {optional: true});
-    // The ENVIRONMENT_INITIALIZER runs when the environment injector is created
-    // We need to actually trigger the injector creation
-    const envInjector = TestBed.inject(TestBed);
-
-    let value: string | null = null;
-    StoreService.userId$.subscribe(v => value = v);
-    expect(value).toBe('alice');
+    TestBed.flushEffects();
+    expect(StoreService.userId()).toBe('alice');
 
     userId$.next('bob');
-    expect(StoreService.userId$.getValue()).toBe('bob');
-  });
-
-  it('should work without userId$', () => {
-    TestBed.configureTestingModule({
-      providers: [provideStore()]
-    });
-
-    expect(StoreService.userId$.getValue()).toBeNull();
+    TestBed.flushEffects();
+    expect(StoreService.userId()).toBe('bob');
   });
 });

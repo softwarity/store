@@ -1,186 +1,208 @@
 <section class="playground">
   <h2>Playground</h2>
-
-  <!-- =============================== -->
-  <!-- DECORATOR API (primary section)  -->
-  <!-- =============================== -->
-  <h3>Decorator API — Persistent table configuration</h3>
+  <h3>Persistent table configuration</h3>
   <p class="section-desc">
-    Try it: toggle columns, sort, change page size or navigate pages.
-    Every change is <strong>automatically persisted</strong> thanks to deep mutation tracking.
-    <strong>Reload the page</strong> — your configuration is still there. Check the storage inspector below to see the raw JSON in real time.
+    The table below lets you toggle columns, sort, and paginate.
+    Every change you make is <strong>automatically persisted</strong> to browser storage.
+    <strong>Reload the page</strong> — your choices are restored instantly.
+    Switch between the 4 available APIs to see each storage backend in action.
   </p>
 
-  <interactive-code language="typescript">
-    <textarea condition="decorator=LocalStored">import { ${decorator} } from '@softwarity/store';
+  <interactive-code language="typescript" show-separators>
+    <textarea condition="api=LocalStored">import { ${api} } from '@softwarity/store';
 
-@Component({ ... })
+@Component({
+  templateUrl: './my.component.html',
+  ...
+})
 export class MyComponent {
 
-  // Persists to localStorage.
-  // 1st param: schema version — increment it when the object
-  // shape changes to discard stale browser data automatically.
-  // 2nd param: custom storage key (default: ClassName.property).
-  @LocalStored(${version}, '${id}')
-  tableConfig = { displayedColumns: ['name', 'age', 'email'], ... };
+  // → localStorage
+  // 1st param: schema version — increment to discard stale data
+  // when the schema changes.
+  // 2nd param (optional): custom storage key.
+  // Default: ClassName.property (scoped to this component).
+  // Set a custom key to share config across components.
+  @LocalStored(1, 'demo-decorator-local')
+  config = {
+    columns: ['name', 'age', 'email'],
+    sort: { column: 'name', direction: 'asc' },
+    pageSize: 5, pageIndex: 0
+  };
 
   // Deep mutations are tracked automatically:
-  this.tableConfig.sortDirection = 'desc';       // saves!
-  this.tableConfig.displayedColumns.push('role'); // saves!
-  this.tableConfig.displayedColumns.splice(0, 1); // saves!
+  this.config.sort.direction = 'desc';       // nested prop → saves!
+  this.config.columns.push('role');           // array method → saves!
+  this.config.columns.splice(0, 1);          // array method → saves!
+  this.config.columns[0] = 'role';           // index assignment → saves!
 }</textarea>
-    <textarea condition="decorator=SessionStored">import { ${decorator} } from '@softwarity/store';
+    <textarea condition="api=SessionStored">import { ${api} } from '@softwarity/store';
 
-@Component({ ... })
+@Component({
+  templateUrl: './my.component.html',
+  ...
+})
 export class MyComponent {
 
-  // Persists to sessionStorage — lives only for the current
-  // browser tab. No version needed: data is naturally
-  // short-lived and discarded when the tab closes.
-  // Optional param: custom storage key (default: ClassName.property).
-  @SessionStored('${sessionId}')
-  tableConfig = { displayedColumns: ['name', 'age', 'email'], ... };
+  // → sessionStorage (lives only for the current browser tab)
+  // No schema version needed: data is short-lived.
+  // Optional param: custom storage key.
+  // Default: ClassName.property (scoped to this component).
+  // Set a custom key to share config across components.
+  @SessionStored('demo-decorator-session')
+  config = {
+    columns: ['name', 'age', 'email'],
+    sort: { column: 'name', direction: 'asc' },
+    pageSize: 5, pageIndex: 0
+  };
 
-  // Deep mutations are tracked the same way:
-  this.tableConfig.sortDirection = 'desc';       // saves!
-  this.tableConfig.displayedColumns.push('role'); // saves!
-  this.tableConfig.displayedColumns.splice(0, 1); // saves!
+  // Same deep mutations as @LocalStored:
+  this.config.sort.column = 'age';            // nested prop → saves!
+  this.config.columns.push('status');         // array method → saves!
 }</textarea>
-    <code-binding key="decorator" type="select" options="LocalStored,SessionStored" value="LocalStored" carousel (change)="setStorageMode($any($event).detail)"></code-binding>
-    <code-binding key="version" type="number" value="1" min="1" max="99"></code-binding>
-    <code-binding key="id" type="string" value="demo-table-config"></code-binding>
-    <code-binding key="sessionId" type="string" value="demo-table-config"></code-binding>
-  </interactive-code>
+    <textarea condition="api=localStored">import { ${api} } from '@softwarity/store';
 
-  <!-- Controls: column toggles + page size -->
-  <div class="controls">
-    <div class="control-group">
-      <span class="control-label">Columns</span>
-      <div class="control-buttons">
-        @for (col of allColumns; track col.key) {
-          <button class="toggle-btn" [class.active]="isColumnVisible(col.key)" (click)="toggleColumn(col.key)">
-            <mat-icon>{{ isColumnVisible(col.key) ? 'visibility' : 'visibility_off' }}</mat-icon>
-            {{ col.label }}
-          </button>
-        }
-      </div>
-    </div>
-    <div class="control-group">
-      <span class="control-label">Page size</span>
-      <div class="control-buttons">
-        @for (size of [5, 10, 12]; track size) {
-          <button class="toggle-btn" [class.active]="tableConfig.pageSize === size" (click)="setPageSize(size)">
-            {{ size }}
-          </button>
-        }
-      </div>
-    </div>
-  </div>
+@Component({
+  templateUrl: './my.component.html',
+  ...
+})
+export class MyComponent {
+
+  // → localStorage
+  // Same deep tracking as decorators, no annotation needed.
+  // Requires Angular injection context.
+  // id: storage key — use the same key across components
+  // to share a persisted config.
+  config = localStored(
+    { columns: ['name', 'age', 'email'],
+      sort: { column: 'name', direction: 'asc' },
+      pageSize: 5, pageIndex: 0 },
+    { id: 'demo-stored-local', version: 1 }
+  );
+
+  this.config.sort.direction = 'desc';       // nested → persists!
+  this.config.pageSize = 10;                 // assignment → persists!
+}</textarea>
+    <textarea condition="api=sessionStored">import { ${api} } from '@softwarity/store';
+
+@Component({
+  templateUrl: './my.component.html',
+  ...
+})
+export class MyComponent {
+
+  // → sessionStorage (lives only for the current browser tab)
+  // No schema version needed: data is short-lived.
+  // id: storage key — use the same key across components
+  // to share a persisted config.
+  config = sessionStored(
+    { columns: ['name', 'age', 'email'],
+      sort: { column: 'name', direction: 'asc' },
+      pageSize: 5, pageIndex: 0 },
+    { id: 'demo-stored-session' }
+  );
+
+  this.config.sort.column = 'age';           // nested → persists!
+  this.config.columns.splice(0, 1);          // array → persists!
+}</textarea>
+    <textarea>// my.component.html — $prop() signals provide reactive bindings
+
+// pagedData is a computed() signal derived from config.$sort(),
+// config.$pageSize() and config.$pageIndex().
+
+&lt;mat-table [dataSource]="pagedData()"&gt;
+  &#64;for (col of allColumns; track col.key) {
+    &lt;ng-container [matColumnDef]="col.key"&gt;
+      &lt;mat-header-cell *matHeaderCellDef (click)="setSort(col.key)"&gt;
+        &#123;&#123; col.label &#125;&#125;
+      &lt;/mat-header-cell&gt;
+      &lt;mat-cell *matCellDef="let row"&gt;
+        &#123;&#123; row[col.key] &#125;&#125;
+      &lt;/mat-cell&gt;
+    &lt;/ng-container&gt;
+  }
+  &lt;mat-header-row *matHeaderRowDef="config.$columns()"&gt;&lt;/mat-header-row&gt;
+  &lt;mat-row *matRowDef="let row; columns: config.$columns()"&gt;&lt;/mat-row&gt;
+&lt;/mat-table&gt;
+
+&lt;mat-paginator
+  [pageSize]="config.$pageSize()"
+  [pageIndex]="config.$pageIndex()"
+  (page)="onPage($event)"&gt;
+&lt;/mat-paginator&gt;</textarea>
+    <code-binding key="api" type="select" options="LocalStored,SessionStored,localStored,sessionStored" value="LocalStored" carousel (change)="setApi($any($event).detail)"></code-binding>
+  </interactive-code>
 
   <!-- Table -->
   <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          @for (col of allColumns; track col.key) {
-            @if (isColumnVisible(col.key)) {
-              <th (click)="setSort(col.key)">
-                <span class="th-content">
-                  {{ col.label }}
-                  @if (tableConfig.sortColumn === col.key) {
-                    <mat-icon class="sort-icon">
-                      {{ tableConfig.sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                    </mat-icon>
-                  }
-                </span>
-              </th>
-            }
-          }
-        </tr>
-      </thead>
-      <tbody>
-        @for (row of pagedData; track $index) {
-          <tr>
-            @for (col of allColumns; track col.key) {
-              @if (isColumnVisible(col.key)) {
-                <td>
-                  @if (col.key === 'status') {
-                    <span class="status-badge" [class]="getCellValue(row, col.key)">{{ getCellValue(row, col.key) }}</span>
-                  } @else {
-                    {{ getCellValue(row, col.key) }}
-                  }
-                </td>
+    <mat-table [dataSource]="pagedData()">
+      @for (col of allColumns; track col.key) {
+        <ng-container [matColumnDef]="col.key">
+          <mat-header-cell *matHeaderCellDef (click)="setSort(col.key)">
+            <span class="th-content">
+              {{ col.label }}
+              @if (config().$sort().column === col.key) {
+                <mat-icon class="sort-icon">
+                  {{ config().$sort().direction === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                </mat-icon>
               }
+            </span>
+          </mat-header-cell>
+          <mat-cell *matCellDef="let row">
+            @if (col.key === 'status') {
+              <span class="status-badge" [class]="row[col.key]">{{ row[col.key] }}</span>
+            } @else {
+              {{ row[col.key] }}
             }
-          </tr>
-        }
-      </tbody>
-    </table>
+          </mat-cell>
+        </ng-container>
+      }
+
+      <ng-container matColumnDef="_settings">
+        <mat-header-cell *matHeaderCellDef class="settings-cell">
+          <button mat-icon-button [matMenuTriggerFor]="columnMenu">
+            <mat-icon>view_column</mat-icon>
+          </button>
+          <mat-menu #columnMenu="matMenu" xPosition="before">
+            @for (col of allColumns; track col.key) {
+              <mat-checkbox
+                class="column-menu-item"
+                [checked]="config().$columns().includes(col.key)"
+                [disabled]="config().$columns().includes(col.key) && config().$columns().length === 1"
+                (click)="$event.stopPropagation()"
+                (change)="toggleColumn(col.key)">
+                {{ col.label }}
+              </mat-checkbox>
+            }
+          </mat-menu>
+        </mat-header-cell>
+        <mat-cell *matCellDef class="settings-cell"></mat-cell>
+      </ng-container>
+
+      <mat-header-row *matHeaderRowDef="displayedColumns()"></mat-header-row>
+      <mat-row *matRowDef="let row; columns: displayedColumns()"></mat-row>
+    </mat-table>
   </div>
 
-  <!-- Pagination -->
-  <div class="pagination">
-    <button class="page-btn" (click)="prevPage()" [disabled]="tableConfig.currentPage <= 0">
-      <mat-icon>chevron_left</mat-icon>
-    </button>
-    <span class="page-info">Page {{ tableConfig.currentPage + 1 }} / {{ totalPages }}</span>
-    <button class="page-btn" (click)="nextPage()" [disabled]="tableConfig.currentPage >= totalPages - 1">
-      <mat-icon>chevron_right</mat-icon>
-    </button>
-    <button class="reset-btn" (click)="resetConfig()">
-      <mat-icon>restart_alt</mat-icon> Reset
-    </button>
-  </div>
+  <!-- Mat Paginator — connected via $prop() signals -->
+  <mat-paginator
+    [length]="12"
+    [pageSize]="config().$pageSize()"
+    [pageIndex]="config().$pageIndex()"
+    [pageSizeOptions]="[5, 10, 12]"
+    (page)="onPage($event)">
+  </mat-paginator>
 
   <!-- Storage inspector -->
   <div class="storage-inspector">
     <div class="inspector-header">
-      <span class="storage-badge" [class.local]="storageMode === 'LocalStored'" [class.session]="storageMode === 'SessionStored'">{{ storageBadgeLabel }}</span>
-      <code class="storage-key">{{ storageKey }}</code>
-    </div>
-    <pre class="storage-json">{{ storageContent }}</pre>
-  </div>
-
-  <!-- =============================== -->
-  <!-- SIGNALS API (secondary section)  -->
-  <!-- =============================== -->
-  <h3>Signals API — localSignal / sessionSignal</h3>
-  <p class="section-desc">
-    Alternative signal-based API. Returns a <code>StoredSignal&lt;T&gt;</code> with plain property access and <code>$prop()</code> reactive signals.
-    Assign properties directly — persistence is automatic.
-    Change the values below and <strong>reload the page</strong> — they persist too.
-  </p>
-
-  <interactive-code language="typescript">
-    <textarea>import { localSignal } from '@softwarity/store';
-
-@Component({ ... })
-export class MyComponent {
-  prefs = localSignal(
-    { theme: '${theme}', lang: '${lang}' },
-    1,
-    { id: 'demo-signal-prefs' }
-  );
-
-  // Plain property assignment — persists automatically
-  this.prefs.theme = '${theme}';
-
-  // Reactive signal for templates
-  // template: [value]="prefs.$theme()"
-}</textarea>
-    <code-binding key="theme" type="select" options="dark,light,auto" [value]="signalPrefs.$theme()" (change)="setTheme($any($event).detail)"></code-binding>
-    <code-binding key="lang" type="select" options="en,fr,de,es" [value]="signalPrefs.$lang()" (change)="setLang($any($event).detail)"></code-binding>
-  </interactive-code>
-
-  <div class="storage-inspector">
-    <div class="inspector-header">
-      <span class="storage-badge local">localStorage</span>
-      <code class="storage-key">demo-signal-prefs</code>
-      <button class="reset-btn small" (click)="resetSignal()">
+      <span class="storage-badge" [class.local]="storageType() === 'localStorage'" [class.session]="storageType() === 'sessionStorage'">{{ storageType() }}</span>
+      <code class="storage-key">{{ activeStorageKey() }}</code>
+      <button class="reset-btn small" (click)="resetConfig()">
         <mat-icon>restart_alt</mat-icon>
       </button>
     </div>
-    <pre class="storage-json">{{ "theme: " + signalPrefs.$theme() + ", lang: " + signalPrefs.$lang() }}</pre>
+    <pre class="storage-json">{{ storageContent() }}</pre>
   </div>
 
 </section>

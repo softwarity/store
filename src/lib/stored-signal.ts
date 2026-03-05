@@ -1,13 +1,8 @@
-import {DestroyRef, Injector, Signal, WritableSignal, computed, effect, inject, signal} from '@angular/core';
+import {Injector, Signal, computed, effect, inject, signal} from '@angular/core';
 import {FakeStorage} from './fake-storage';
 import {StoreService} from './store.service';
 
 // --- Types ---
-
-export interface StoredSignalOptions {
-  id: string;
-  injector?: Injector;
-}
 
 export interface StoredOptions {
   id: string;
@@ -22,14 +17,14 @@ export type StoredSignal<T extends Record<string, any>> = {
 
 // --- Storage helpers ---
 
-function getLocalStorage(): Storage {
+export function getLocalStorage(): Storage {
   if (typeof window === 'undefined' || !window.localStorage) {
     return new FakeStorage();
   }
   return localStorage;
 }
 
-function getSessionStorage(): Storage {
+export function getSessionStorage(): Storage {
   if (typeof window === 'undefined' || !window.sessionStorage) {
     return new FakeStorage();
   }
@@ -50,8 +45,8 @@ function loadFromStorage<T>(storage: Storage, key: string, initialValue: T, vers
   }
   try {
     const parsed = JSON.parse(entry);
-    if (version === undefined || parsed._version === version) {
-      const {_version, ...data} = parsed;
+    if (version === undefined || parsed._schemaVersion === version) {
+      const {_schemaVersion, ...data} = parsed;
       return data as T;
     }
     return initialValue;
@@ -63,7 +58,7 @@ function loadFromStorage<T>(storage: Storage, key: string, initialValue: T, vers
 
 function saveToStorage<T>(storage: Storage, key: string, value: T, version?: number): void {
   try {
-    const toStore = version !== undefined ? {...value, _version: version} : {...value};
+    const toStore = version !== undefined ? {...value, _schemaVersion: version} : {...value};
     storage.setItem(key, JSON.stringify(toStore));
   } catch (e) {
     console.warn(`@softwarity/store: Failed to save signal (key: ${key}).`, e);
@@ -72,7 +67,13 @@ function saveToStorage<T>(storage: Storage, key: string, value: T, version?: num
 
 // --- Deep tracking helpers ---
 
-function toPlain(value: any): any {
+const TRACKED = Symbol('TRACKED');
+
+function isTracked(value: any): boolean {
+  return value !== null && value !== undefined && typeof value === 'object' && value[TRACKED] === true;
+}
+
+export function toPlain(value: any): any {
   if (value === null || value === undefined || typeof value !== 'object') {
     return value;
   }
@@ -90,6 +91,9 @@ function trackValue(value: any, onMutate: () => void): any {
   if (value === null || value === undefined || typeof value !== 'object') {
     return value;
   }
+  if (isTracked(value)) {
+    return value;
+  }
   if (Array.isArray(value)) {
     return createTrackedArray(value, onMutate);
   }
@@ -97,137 +101,60 @@ function trackValue(value: any, onMutate: () => void): any {
 }
 
 function createTrackedObject(obj: any, onMutate: () => void): any {
-  const result: any = {};
-  const inner: Record<string, any> = {};
-
+  const target: any = {};
   for (const key of Object.keys(obj)) {
-    inner[key] = trackValue(obj[key], onMutate);
-    Object.defineProperty(result, key, {
-      enumerable: true,
-      get: () => inner[key],
-      set: (v: any) => {
-        inner[key] = trackValue(v, onMutate);
-        onMutate();
-      }
-    });
+    target[key] = trackValue(obj[key], onMutate);
   }
-
-  return result;
+  return new Proxy(target, {
+    get(t, prop) {
+      if (prop === TRACKED) return true;
+      return t[prop as string];
+    },
+    set(t, prop, value) {
+      t[prop as string] = trackValue(value, onMutate);
+      onMutate();
+      return true;
+    }
+  });
 }
 
 function createTrackedArray(arr: any[], onMutate: () => void): any[] {
-  const tracked = arr.map(item => trackValue(item, onMutate));
-
-  for (const method of ['push', 'pop', 'shift', 'unshift', 'copyWithin', 'fill', 'reverse', 'sort', 'splice']) {
-    (tracked as any)[method] = (...args: any[]) => {
-      const processedArgs = args.map(arg =>
-        (arg !== null && typeof arg === 'object') ? trackValue(arg, onMutate) : arg
-      );
-      const original = (Array.prototype as any)[method] as Function;
-      const result = original.apply(tracked, processedArgs);
-      onMutate();
-      return result;
-    };
-  }
-
-  return tracked;
-}
-
-// --- Signal-based stored signal (no deep tracking) ---
-
-function createStoredSignal<T extends Record<string, any>>(
-  storage: Storage,
-  initialValue: T,
-  version: number | undefined,
-  options: StoredSignalOptions
-): StoredSignal<T> {
-  const injector = options.injector ?? inject(Injector);
-  const destroyRef = injector.get(DestroyRef);
-
-  const userId = StoreService.userId$.getValue();
-  let currentKey = buildKey(userId, options.id);
-  const loaded = loadFromStorage<T>(storage, currentKey, initialValue, version);
-
-  // One WritableSignal per property
-  const propSignals: Record<string, WritableSignal<any>> = {};
-  for (const key of Object.keys(loaded)) {
-    propSignals[key] = signal((loaded as any)[key]);
-  }
-
-  // Computed aggregate for persistence
-  const fullValue = computed(() => {
-    const result: any = {};
-    for (const key of Object.keys(propSignals)) {
-      result[key] = propSignals[key]();
-    }
-    return result as T;
-  });
-
-  // Persist on every change
-  effect(() => {
-    saveToStorage(storage, currentKey, fullValue(), version);
-  }, {injector});
-
-  // Build proxy object
-  const proxy: any = {};
-  for (const key of Object.keys(propSignals)) {
-    // config.prop — plain value read/write
-    Object.defineProperty(proxy, key, {
-      enumerable: true,
-      get: () => propSignals[key](),
-      set: (v: any) => propSignals[key].set(v)
-    });
-    // config.$prop — Signal<T[K]> (readonly)
-    Object.defineProperty(proxy, '$' + key, {
-      enumerable: false,
-      get: () => propSignals[key].asReadonly()
-    });
-  }
-
-  // React to userId changes
-  const subscription = StoreService.userId$.subscribe(newUserId => {
-    const newKey = buildKey(newUserId, options.id);
-    if (newKey !== currentKey) {
-      currentKey = newKey;
-      const reloaded = loadFromStorage<T>(storage, currentKey, initialValue, version);
-      for (const key of Object.keys(propSignals)) {
-        propSignals[key].set((reloaded as any)[key]);
+  const target = arr.map(item => trackValue(item, onMutate));
+  return new Proxy(target, {
+    get(t, prop) {
+      if (prop === TRACKED) return true;
+      return t[prop as any];
+    },
+    set(t, prop, value) {
+      if (prop === 'length') {
+        t.length = value;
+        onMutate();
+        return true;
       }
+      t[prop as any] = trackValue(value, onMutate);
+      onMutate();
+      return true;
     }
   });
-
-  destroyRef.onDestroy(() => subscription.unsubscribe());
-
-  return proxy as StoredSignal<T>;
 }
 
-// --- Deep-tracked stored signal (like decorators) ---
+// --- Shared builder: tracked proxy with $prop signals ---
 
-function createDeepStoredSignal<T extends Record<string, any>>(
-  storage: Storage,
+export function createTrackedProxy<T extends Record<string, any>>(
   initialValue: T,
-  version: number | undefined,
-  options: StoredOptions
-): StoredSignal<T> {
-  const injector = options.injector ?? inject(Injector);
-  const destroyRef = injector.get(DestroyRef);
-
-  const userId = StoreService.userId$.getValue();
-  let currentKey = buildKey(userId, options.id);
-  const loaded = loadFromStorage<T>(storage, currentKey, initialValue, version);
-
-  // Version counter to force signal reactivity on deep mutations
+  onSave: (plainValue: T) => void
+): {proxy: StoredSignal<T>; reload: (newValue: T) => void} {
   const versionSig = signal(0);
+  const propKeys = Object.keys(initialValue);
 
   function onMutate() {
     versionSig.update(v => v + 1);
+    onSave(toPlain(trackedValue) as T);
   }
 
-  // The tracked object is the canonical data store
-  let trackedValue = createTrackedObject(loaded, onMutate);
+  let trackedValue = createTrackedObject(initialValue, onMutate);
 
   // Per-property computed signals for $prop access
-  const propKeys = Object.keys(loaded);
   const propComputeds: Record<string, Signal<any>> = {};
   for (const key of propKeys) {
     propComputeds[key] = computed(() => {
@@ -236,21 +163,9 @@ function createDeepStoredSignal<T extends Record<string, any>>(
     });
   }
 
-  // Computed aggregate for persistence
-  const fullValue = computed(() => {
-    versionSig();
-    return toPlain(trackedValue) as T;
-  });
-
-  // Persist on every change
-  effect(() => {
-    saveToStorage(storage, currentKey, fullValue(), version);
-  }, {injector});
-
   // Build proxy object
   const proxy: any = {};
   for (const key of propKeys) {
-    // config.prop — returns tracked value (deep mutations tracked)
     Object.defineProperty(proxy, key, {
       enumerable: true,
       get: () => trackedValue[key],
@@ -258,58 +173,89 @@ function createDeepStoredSignal<T extends Record<string, any>>(
         trackedValue[key] = v; // goes through tracked setter → onMutate
       }
     });
-    // config.$prop — Signal<T[K]> (readonly, returns plain value)
     Object.defineProperty(proxy, '$' + key, {
       enumerable: false,
       get: () => propComputeds[key]
     });
   }
 
-  // React to userId changes
-  const subscription = StoreService.userId$.subscribe(newUserId => {
-    const newKey = buildKey(newUserId, options.id);
-    if (newKey !== currentKey) {
-      currentKey = newKey;
-      const reloaded = loadFromStorage<T>(storage, currentKey, initialValue, version);
-      trackedValue = createTrackedObject(reloaded, onMutate);
-      onMutate();
-    }
-  });
+  function reload(newValue: T) {
+    trackedValue = createTrackedObject(newValue, onMutate);
+    versionSig.update(v => v + 1);
+  }
 
-  destroyRef.onDestroy(() => subscription.unsubscribe());
-
-  return proxy as StoredSignal<T>;
+  return {proxy: proxy as StoredSignal<T>, reload};
 }
 
-// --- Public API: Signal-based (no deep tracking) ---
-
-export function localSignal<T extends Record<string, any>>(
-  initialValue: T,
-  version: number,
-  options: StoredSignalOptions
-): StoredSignal<T> {
-  return createStoredSignal(getLocalStorage(), initialValue, version, options);
-}
-
-export function sessionSignal<T extends Record<string, any>>(
-  initialValue: T,
-  options: StoredSignalOptions
-): StoredSignal<T> {
-  return createStoredSignal(getSessionStorage(), initialValue, undefined, options);
-}
-
-// --- Public API: Deep-tracked (like decorators, no annotation needed) ---
+// --- Public API: localStored / sessionStored ---
 
 export function localStored<T extends Record<string, any>>(
   initialValue: T,
   options: StoredOptions & {version: number}
 ): StoredSignal<T> {
-  return createDeepStoredSignal(getLocalStorage(), initialValue, options.version, options);
+  const storage = getLocalStorage();
+  const injector = options.injector ?? inject(Injector);
+
+  const userId = StoreService.userId();
+  let currentKey = buildKey(userId, options.id);
+  const loaded = loadFromStorage<T>(storage, currentKey, initialValue, options.version);
+
+  const {proxy, reload} = createTrackedProxy<T>(loaded, (plainValue) => {
+    saveToStorage(storage, currentKey, plainValue, options.version);
+  });
+
+  // Also persist via effect for batched initial write
+  const versionSig = signal(0);
+  effect(() => {
+    versionSig();
+    saveToStorage(storage, currentKey, toPlain(proxy) as T, options.version);
+  }, {injector});
+
+  // React to userId changes via effect (auto-cleanup)
+  effect(() => {
+    const newUserId = StoreService.userId();
+    const newKey = buildKey(newUserId, options.id);
+    if (newKey !== currentKey) {
+      currentKey = newKey;
+      const reloaded = loadFromStorage<T>(storage, currentKey, initialValue, options.version);
+      reload(reloaded);
+    }
+  }, {injector});
+
+  return proxy;
 }
 
 export function sessionStored<T extends Record<string, any>>(
   initialValue: T,
   options: StoredOptions
 ): StoredSignal<T> {
-  return createDeepStoredSignal(getSessionStorage(), initialValue, undefined, options);
+  const storage = getSessionStorage();
+  const injector = options.injector ?? inject(Injector);
+
+  const userId = StoreService.userId();
+  let currentKey = buildKey(userId, options.id);
+  const loaded = loadFromStorage<T>(storage, currentKey, initialValue, undefined);
+
+  const {proxy, reload} = createTrackedProxy<T>(loaded, (plainValue) => {
+    saveToStorage(storage, currentKey, plainValue, undefined);
+  });
+
+  const versionSig = signal(0);
+  effect(() => {
+    versionSig();
+    saveToStorage(storage, currentKey, toPlain(proxy) as T, undefined);
+  }, {injector});
+
+  // React to userId changes via effect (auto-cleanup)
+  effect(() => {
+    const newUserId = StoreService.userId();
+    const newKey = buildKey(newUserId, options.id);
+    if (newKey !== currentKey) {
+      currentKey = newKey;
+      const reloaded = loadFromStorage<T>(storage, currentKey, initialValue, undefined);
+      reload(reloaded);
+    }
+  }, {injector});
+
+  return proxy;
 }

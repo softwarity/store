@@ -1,158 +1,14 @@
-import {Injector} from '@angular/core';
+import {Injector, signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
-import {BehaviorSubject} from 'rxjs';
 import {StoreService} from './store.service';
-import {localSignal, localStored, sessionSignal, sessionStored} from './stored-signal';
-
-describe('localSignal', () => {
-  let injector: Injector;
-
-  beforeEach(() => {
-    localStorage.clear();
-    StoreService.userId$ = new BehaviorSubject<string | null>(null);
-    TestBed.configureTestingModule({});
-    injector = TestBed.inject(Injector);
-  });
-
-  afterEach(() => localStorage.clear());
-
-  it('should create with initial values accessible as plain properties', () => {
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({foo: 5, bar: 'hello'}, 1, {id: 'ls-test'})
-    );
-    expect(config.foo).toBe(5);
-    expect(config.bar).toBe('hello');
-  });
-
-  it('should expose $-prefixed signals for each property', () => {
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({foo: 5}, 1, {id: 'ls-test'})
-    );
-    expect(config.$foo()).toBe(5);
-  });
-
-  it('should persist on plain property assignment', () => {
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({foo: 5}, 1, {id: 'ls-test'})
-    );
-    config.foo = 10;
-    TestBed.flushEffects();
-    const stored = JSON.parse(localStorage.getItem('ls-test') || '{}');
-    expect(stored.foo).toBe(10);
-    expect(stored._version).toBe(1);
-  });
-
-  it('should update $-prefixed signal when property is assigned', () => {
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({foo: 5}, 1, {id: 'ls-test'})
-    );
-    config.foo = 42;
-    expect(config.$foo()).toBe(42);
-  });
-
-  it('should load from storage on creation', () => {
-    localStorage.setItem('ls-test', JSON.stringify({_version: 1, foo: 42}));
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({foo: 5}, 1, {id: 'ls-test'})
-    );
-    expect(config.foo).toBe(42);
-    expect(config.$foo()).toBe(42);
-  });
-
-  it('should use initial value on version mismatch', () => {
-    localStorage.setItem('ls-test', JSON.stringify({_version: 1, foo: 42}));
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({foo: 5}, 2, {id: 'ls-test'})
-    );
-    expect(config.foo).toBe(5);
-  });
-
-  it('should handle corrupted JSON in storage', () => {
-    localStorage.setItem('ls-test', 'NOT_VALID');
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({foo: 5}, 1, {id: 'ls-test'})
-    );
-    expect(config.foo).toBe(5);
-    expect(localStorage.getItem('ls-test')).toBeNull();
-  });
-
-  it('should work with explicit injector option', () => {
-    const config = localSignal({foo: 5}, 1, {id: 'ls-test', injector});
-    expect(config.foo).toBe(5);
-  });
-
-  it('should react to userId changes', () => {
-    StoreService.userId$.next('alice');
-    localStorage.setItem('alice_ls-test', JSON.stringify({_version: 1, foo: 99}));
-
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({foo: 5}, 1, {id: 'ls-test'})
-    );
-    expect(config.foo).toBe(99);
-
-    localStorage.setItem('bob_ls-test', JSON.stringify({_version: 1, foo: 77}));
-    StoreService.userId$.next('bob');
-    expect(config.foo).toBe(77);
-    expect(config.$foo()).toBe(77);
-  });
-
-  it('should persist multiple properties independently', () => {
-    const config = TestBed.runInInjectionContext(() =>
-      localSignal({count: 0, name: 'test'}, 1, {id: 'ls-test'})
-    );
-    config.count = 42;
-    expect(config.count).toBe(42);
-    expect(config.name).toBe('test');
-    TestBed.flushEffects();
-    const stored = JSON.parse(localStorage.getItem('ls-test') || '{}');
-    expect(stored.count).toBe(42);
-    expect(stored.name).toBe('test');
-  });
-});
-
-describe('sessionSignal', () => {
-  beforeEach(() => {
-    sessionStorage.clear();
-    StoreService.userId$ = new BehaviorSubject<string | null>(null);
-    TestBed.configureTestingModule({});
-  });
-
-  afterEach(() => sessionStorage.clear());
-
-  it('should create with initial values accessible as plain properties', () => {
-    const config = TestBed.runInInjectionContext(() =>
-      sessionSignal({bar: 'hello'}, {id: 'ss-test'})
-    );
-    expect(config.bar).toBe('hello');
-  });
-
-  it('should persist on plain property assignment', () => {
-    const config = TestBed.runInInjectionContext(() =>
-      sessionSignal({bar: 'hello'}, {id: 'ss-test'})
-    );
-    config.bar = 'world';
-    TestBed.flushEffects();
-    const stored = JSON.parse(sessionStorage.getItem('ss-test') || '{}');
-    expect(stored.bar).toBe('world');
-    expect(stored._version).toBeUndefined();
-  });
-
-  it('should load from storage regardless of version', () => {
-    sessionStorage.setItem('ss-test', JSON.stringify({bar: 'stored'}));
-    const config = TestBed.runInInjectionContext(() =>
-      sessionSignal({bar: 'hello'}, {id: 'ss-test'})
-    );
-    expect(config.bar).toBe('stored');
-    expect(config.$bar()).toBe('stored');
-  });
-});
+import {localStored, sessionStored} from './stored-signal';
 
 describe('localStored', () => {
   let injector: Injector;
 
   beforeEach(() => {
     localStorage.clear();
-    StoreService.userId$ = new BehaviorSubject<string | null>(null);
+    StoreService.userId.set(null);
     TestBed.configureTestingModule({});
     injector = TestBed.inject(Injector);
   });
@@ -179,10 +35,17 @@ describe('localStored', () => {
       localStored({pageSize: 5}, {id: 'ld-test', version: 1})
     );
     config.pageSize = 10;
-    TestBed.flushEffects();
     const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
     expect(stored.pageSize).toBe(10);
-    expect(stored._version).toBe(1);
+    expect(stored._schemaVersion).toBe(1);
+  });
+
+  it('should update $-prefixed signal on property assignment', () => {
+    const config = TestBed.runInInjectionContext(() =>
+      localStored({pageSize: 5}, {id: 'ld-test', version: 1})
+    );
+    config.pageSize = 42;
+    expect(config.$pageSize()).toBe(42);
   });
 
   it('should track nested object mutations', () => {
@@ -190,7 +53,6 @@ describe('localStored', () => {
       localStored({sort: {column: 'name', direction: 'asc'}}, {id: 'ld-test', version: 1})
     );
     config.sort.direction = 'desc';
-    TestBed.flushEffects();
     const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
     expect(stored.sort.direction).toBe('desc');
     expect(stored.sort.column).toBe('name');
@@ -209,7 +71,6 @@ describe('localStored', () => {
       localStored({columns: ['name', 'age']}, {id: 'ld-test', version: 1})
     );
     config.columns.push('email');
-    TestBed.flushEffects();
     const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
     expect(stored.columns).toEqual(['name', 'age', 'email']);
   });
@@ -219,7 +80,6 @@ describe('localStored', () => {
       localStored({columns: ['name', 'age', 'email']}, {id: 'ld-test', version: 1})
     );
     config.columns.splice(1, 1);
-    TestBed.flushEffects();
     const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
     expect(stored.columns).toEqual(['name', 'email']);
   });
@@ -229,13 +89,12 @@ describe('localStored', () => {
       localStored({columns: ['a', 'b', 'c']}, {id: 'ld-test', version: 1})
     );
     config.columns.reverse();
-    TestBed.flushEffects();
     const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
     expect(stored.columns).toEqual(['c', 'b', 'a']);
   });
 
   it('should load from storage on creation', () => {
-    localStorage.setItem('ld-test', JSON.stringify({_version: 1, pageSize: 42}));
+    localStorage.setItem('ld-test', JSON.stringify({_schemaVersion: 1, pageSize: 42}));
     const config = TestBed.runInInjectionContext(() =>
       localStored({pageSize: 5}, {id: 'ld-test', version: 1})
     );
@@ -243,11 +102,20 @@ describe('localStored', () => {
   });
 
   it('should use initial value on version mismatch', () => {
-    localStorage.setItem('ld-test', JSON.stringify({_version: 1, pageSize: 42}));
+    localStorage.setItem('ld-test', JSON.stringify({_schemaVersion: 1, pageSize: 42}));
     const config = TestBed.runInInjectionContext(() =>
       localStored({pageSize: 5}, {id: 'ld-test', version: 2})
     );
     expect(config.pageSize).toBe(5);
+  });
+
+  it('should handle corrupted JSON in storage', () => {
+    localStorage.setItem('ld-test', 'NOT_VALID');
+    const config = TestBed.runInInjectionContext(() =>
+      localStored({pageSize: 5}, {id: 'ld-test', version: 1})
+    );
+    expect(config.pageSize).toBe(5);
+    expect(localStorage.getItem('ld-test')).toBeNull();
   });
 
   it('should work with explicit injector option', () => {
@@ -256,16 +124,17 @@ describe('localStored', () => {
   });
 
   it('should react to userId changes', () => {
-    StoreService.userId$.next('alice');
-    localStorage.setItem('alice_ld-test', JSON.stringify({_version: 1, pageSize: 99}));
+    StoreService.userId.set('alice');
+    localStorage.setItem('alice_ld-test', JSON.stringify({_schemaVersion: 1, pageSize: 99}));
 
     const config = TestBed.runInInjectionContext(() =>
       localStored({pageSize: 5}, {id: 'ld-test', version: 1})
     );
     expect(config.pageSize).toBe(99);
 
-    localStorage.setItem('bob_ld-test', JSON.stringify({_version: 1, pageSize: 77}));
-    StoreService.userId$.next('bob');
+    localStorage.setItem('bob_ld-test', JSON.stringify({_schemaVersion: 1, pageSize: 77}));
+    StoreService.userId.set('bob');
+    TestBed.flushEffects();
     expect(config.pageSize).toBe(77);
     expect(config.$pageSize()).toBe(77);
   });
@@ -276,16 +145,81 @@ describe('localStored', () => {
     );
     config.items.push({name: 'b'});
     config.items[1].name = 'c';
-    TestBed.flushEffects();
     const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
     expect(stored.items[1].name).toBe('c');
+  });
+
+  it('should persist multiple properties independently', () => {
+    const config = TestBed.runInInjectionContext(() =>
+      localStored({count: 0, name: 'test'}, {id: 'ld-test', version: 1})
+    );
+    config.count = 42;
+    expect(config.count).toBe(42);
+    expect(config.name).toBe('test');
+    const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
+    expect(stored.count).toBe(42);
+    expect(stored.name).toBe('test');
+  });
+
+  it('should track direct array index assignment', () => {
+    const config = TestBed.runInInjectionContext(() =>
+      localStored({columns: ['name', 'age', 'email']}, {id: 'ld-test', version: 1})
+    );
+    config.columns[0] = 'id';
+    const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
+    expect(stored.columns).toEqual(['id', 'age', 'email']);
+    expect(config.$columns()).toEqual(['id', 'age', 'email']);
+  });
+
+  it('should track direct array index assignment with object', () => {
+    const config = TestBed.runInInjectionContext(() =>
+      localStored({items: [{name: 'a'}, {name: 'b'}]}, {id: 'ld-test', version: 1})
+    );
+    config.items[0] = {name: 'z'};
+    const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
+    expect(stored.items[0].name).toBe('z');
+    // The replaced object should also be deep-tracked
+    config.items[0].name = 'w';
+    const stored2 = JSON.parse(localStorage.getItem('ld-test') || '{}');
+    expect(stored2.items[0].name).toBe('w');
+  });
+
+  it('should track new property on nested object', () => {
+    const config = TestBed.runInInjectionContext(() =>
+      localStored({sort: {column: 'name', direction: 'asc'}}, {id: 'ld-test', version: 1})
+    );
+    (config.sort as any).newProp = 'value';
+    const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
+    expect(stored.sort.newProp).toBe('value');
+  });
+
+  it('should track array length = 0', () => {
+    const config = TestBed.runInInjectionContext(() =>
+      localStored({columns: ['name', 'age', 'email']}, {id: 'ld-test', version: 1})
+    );
+    config.columns.length = 0;
+    const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
+    expect(stored.columns).toEqual([]);
+    expect(config.$columns()).toEqual([]);
+  });
+
+  it('should not double-wrap already tracked values', () => {
+    const config = TestBed.runInInjectionContext(() =>
+      localStored({columns: ['c', 'a', 'b']}, {id: 'ld-test', version: 1})
+    );
+    config.columns.sort();
+    const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
+    expect(stored.columns).toEqual(['a', 'b', 'c']);
+    config.columns.reverse();
+    const stored2 = JSON.parse(localStorage.getItem('ld-test') || '{}');
+    expect(stored2.columns).toEqual(['c', 'b', 'a']);
   });
 });
 
 describe('sessionStored', () => {
   beforeEach(() => {
     sessionStorage.clear();
-    StoreService.userId$ = new BehaviorSubject<string | null>(null);
+    StoreService.userId.set(null);
     TestBed.configureTestingModule({});
   });
 
@@ -304,10 +238,9 @@ describe('sessionStored', () => {
       sessionStored({filters: {search: '', active: true}}, {id: 'sd-test'})
     );
     config.filters.search = 'hello';
-    TestBed.flushEffects();
     const stored = JSON.parse(sessionStorage.getItem('sd-test') || '{}');
     expect(stored.filters.search).toBe('hello');
-    expect(stored._version).toBeUndefined();
+    expect(stored._schemaVersion).toBeUndefined();
   });
 
   it('should expose $-prefixed signals', () => {

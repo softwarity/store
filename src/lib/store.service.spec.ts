@@ -1,5 +1,5 @@
+import {signal} from '@angular/core';
 import {LocalStoreService, SessionStoreService, StoreService} from './store.service';
-import {BehaviorSubject} from 'rxjs';
 
 describe('StoreService', () => {
   let service: LocalStoreService;
@@ -263,7 +263,7 @@ describe('StoreService', () => {
   });
 
   it('Version mismatch overwrites storage with new config', () => {
-    localStorage.setItem('test', JSON.stringify({version: 1, foo: 'old'}));
+    localStorage.setItem('test', JSON.stringify({_schemaVersion: 1, foo: 'old'}));
     const res = service.loadCfg({version: 2, id: 'test', foo: 'new', extra: true});
     expect(res.foo).toEqual('new');
     expect(res.extra).toBe(true);
@@ -280,26 +280,25 @@ describe('StoreService', () => {
     expect(json.id).toBeUndefined();
   });
 
-  it('getUserId$ emits when userId$ changes', () => {
-    const original = StoreService.userId$;
-    StoreService.userId$ = new BehaviorSubject<string | null>(null);
-
+  it('onUserIdChange notifies listeners', () => {
     const values: (string | null)[] = [];
-    service.getUserId$().subscribe(v => values.push(v));
+    const unsubscribe = StoreService.onUserIdChange(v => values.push(v));
 
-    expect(values).toEqual([]);
-
-    StoreService.userId$.next('alice');
+    StoreService.userId.set('alice');
+    StoreService._notifyUserIdListeners();
     expect(values).toEqual(['alice']);
 
-    StoreService.userId$.next('bob');
+    StoreService.userId.set('bob');
+    StoreService._notifyUserIdListeners();
     expect(values).toEqual(['alice', 'bob']);
 
-    // null is filtered out
-    StoreService.userId$.next(null);
+    unsubscribe();
+    StoreService.userId.set('charlie');
+    StoreService._notifyUserIdListeners();
     expect(values).toEqual(['alice', 'bob']);
 
-    StoreService.userId$ = original;
+    // Reset
+    StoreService.userId.set(null);
   });
 
   it('LocalStoreService.getStorage returns localStorage', () => {
@@ -370,7 +369,7 @@ describe('StoreService', () => {
   });
 
   it('loadCfg with undefined version loads from storage regardless of stored version', () => {
-    localStorage.setItem('test', JSON.stringify({version: 5, foo: 'stored'}));
+    localStorage.setItem('test', JSON.stringify({_schemaVersion: 5, foo: 'stored'}));
     const res = service.loadCfg({id: 'test', foo: 'default'});
     expect(res.foo).toEqual('stored');
   });

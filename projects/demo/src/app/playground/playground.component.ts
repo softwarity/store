@@ -1,6 +1,11 @@
-import { Component, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { Component, computed, CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
-import { LocalStored, SessionStored, localSignal } from '@softwarity/store';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatTableModule } from '@angular/material/table';
+import { LocalStored, SessionStored, localStored, sessionStored } from '@softwarity/store';
 import { registerInteractiveCode } from '@softwarity/interactive-code';
 
 registerInteractiveCode();
@@ -29,7 +34,7 @@ const EMPLOYEES: Employee[] = [
 ];
 
 @Component({
-  imports: [MatIconModule],
+  imports: [MatButtonModule, MatCheckboxModule, MatIconModule, MatMenuModule, MatPaginatorModule, MatTableModule],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './playground.component.html',
   styleUrl: './playground.component.scss'
@@ -44,40 +49,63 @@ export class PlaygroundComponent {
     {key: 'status', label: 'Status'},
   ];
 
-  private static readonly DEFAULT_CONFIG = {
-    displayedColumns: ['name', 'age', 'email'],
-    sortColumn: 'name',
-    sortDirection: 'asc',
-    pageSize: 5,
-    currentPage: 0
-  };
-
-  // --- Decorator API: two configs, one per storage backend ---
-  @LocalStored(1, 'demo-table-local')
-  localConfig = { ...PlaygroundComponent.DEFAULT_CONFIG };
-
-  @SessionStored('demo-table-session')
-  sessionConfig = { ...PlaygroundComponent.DEFAULT_CONFIG };
-
-  storageMode: 'LocalStored' | 'SessionStored' = 'LocalStored';
-
-  get tableConfig() {
-    return this.storageMode === 'LocalStored' ? this.localConfig : this.sessionConfig;
+  private static defaults() {
+    return {columns: ['name', 'age', 'email'], sort: {column: 'name', direction: 'asc'}, pageSize: 5, pageIndex: 0};
   }
 
-  // --- Signals API demo ---
-  protected signalPrefs = localSignal<{theme: string; lang: string}>(
-    {theme: 'dark', lang: 'en'}, 1, {id: 'demo-signal-prefs'}
-  );
+  // --- 4 configs: same shape, 4 storage backends ---
 
-  // --- Table helpers ---
+  @LocalStored(1, 'demo-decorator-local')
+  private _decoratorLocal = PlaygroundComponent.defaults();
 
-  isColumnVisible(key: string): boolean {
-    return this.tableConfig.displayedColumns.includes(key);
+  @SessionStored('demo-decorator-session')
+  private _decoratorSession = PlaygroundComponent.defaults();
+
+  private _storedLocal = localStored(PlaygroundComponent.defaults(), {id: 'demo-stored-local', version: 1});
+  private _storedSession = sessionStored(PlaygroundComponent.defaults(), {id: 'demo-stored-session'});
+
+  // --- API selector ---
+
+  selectedApi = signal('LocalStored');
+
+  config = computed((): any => {
+    switch (this.selectedApi()) {
+      case 'LocalStored':   return this._decoratorLocal;
+      case 'SessionStored': return this._decoratorSession;
+      case 'localStored':   return this._storedLocal;
+      case 'sessionStored': return this._storedSession;
+      default:              return this._decoratorLocal;
+    }
+  });
+
+  setApi(api: string): void {
+    this.selectedApi.set(api);
   }
+
+  // --- Computed signals ---
+
+  displayedColumns = computed(() => [...this.config().$columns(), '_settings']);
+
+  pagedData = computed(() => {
+    const cfg = this.config();
+    const sort = cfg.$sort();
+    const ps = cfg.$pageSize();
+    const pi = cfg.$pageIndex();
+    const col = sort.column;
+    const dir = sort.direction === 'desc' ? -1 : 1;
+    const sorted = [...EMPLOYEES].sort((a: any, b: any) => {
+      const va = a[col];
+      const vb = b[col];
+      if (typeof va === 'number') return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+    return sorted.slice(pi * ps, (pi + 1) * ps);
+  });
+
+  // --- Column helpers ---
 
   toggleColumn(key: string): void {
-    const cols = this.tableConfig.displayedColumns;
+    const cols = this.config().columns;
     const idx = cols.indexOf(key);
     if (idx >= 0) {
       if (cols.length > 1) cols.splice(idx, 1);
@@ -86,105 +114,68 @@ export class PlaygroundComponent {
     }
   }
 
+  // --- Sort helpers ---
+
   setSort(column: string): void {
-    if (this.tableConfig.sortColumn === column) {
-      this.tableConfig.sortDirection = this.tableConfig.sortDirection === 'asc' ? 'desc' : 'asc';
+    const cfg = this.config();
+    if (cfg.sort.column === column) {
+      cfg.sort.direction = cfg.sort.direction === 'asc' ? 'desc' : 'asc';
     } else {
-      this.tableConfig.sortColumn = column;
-      this.tableConfig.sortDirection = 'asc';
+      cfg.sort.column = column;
+      cfg.sort.direction = 'asc';
     }
   }
 
-  get sortedData(): Employee[] {
-    const col = this.tableConfig.sortColumn;
-    const dir = this.tableConfig.sortDirection === 'desc' ? -1 : 1;
-    return [...EMPLOYEES].sort((a, b) => {
-      const va = (a as any)[col];
-      const vb = (b as any)[col];
-      if (typeof va === 'number') return (va - (vb as number)) * dir;
-      return String(va).localeCompare(String(vb)) * dir;
-    });
+  // --- Pagination helpers ---
+
+  onPage(event: PageEvent): void {
+    const cfg = this.config();
+    cfg.pageSize = event.pageSize;
+    cfg.pageIndex = event.pageIndex;
   }
 
-  get totalPages(): number {
-    return Math.ceil(EMPLOYEES.length / this.tableConfig.pageSize);
+  // --- Reset ---
+
+  resetConfig(): void {
+    const d = PlaygroundComponent.defaults();
+    const cfg = this.config();
+    cfg.columns = d.columns;
+    cfg.sort = d.sort;
+    cfg.pageSize = d.pageSize;
+    cfg.pageIndex = d.pageIndex;
   }
 
-  get pagedData(): Employee[] {
-    const ps = this.tableConfig.pageSize;
-    const page = this.tableConfig.currentPage;
-    return this.sortedData.slice(page * ps, (page + 1) * ps);
-  }
+  // --- Storage inspector ---
 
-  getCellValue(row: Employee, key: string): string | number {
-    return (row as any)[key];
-  }
+  storageType = computed(() => {
+    const api = this.selectedApi();
+    return (api === 'LocalStored' || api === 'localStored') ? 'localStorage' : 'sessionStorage';
+  });
 
-  setPageSize(size: number): void {
-    this.tableConfig.pageSize = size;
-    this.tableConfig.currentPage = 0;
-  }
-
-  prevPage(): void {
-    if (this.tableConfig.currentPage > 0) {
-      this.tableConfig.currentPage = this.tableConfig.currentPage - 1;
+  activeStorageKey = computed(() => {
+    switch (this.selectedApi()) {
+      case 'LocalStored':   return 'demo-decorator-local';
+      case 'SessionStored': return 'demo-decorator-session';
+      case 'localStored':   return 'demo-stored-local';
+      case 'sessionStored': return 'demo-stored-session';
+      default:              return '';
     }
-  }
+  });
 
-  nextPage(): void {
-    if (this.tableConfig.currentPage < this.totalPages - 1) {
-      this.tableConfig.currentPage = this.tableConfig.currentPage + 1;
-    }
-  }
-
-  get storageKey(): string {
-    return this.storageMode === 'LocalStored' ? 'demo-table-local' : 'demo-table-session';
-  }
-
-  get activeStorage(): Storage {
-    return this.storageMode === 'LocalStored' ? localStorage : sessionStorage;
-  }
-
-  get storageBadgeLabel(): string {
-    return this.storageMode === 'LocalStored' ? 'localStorage' : 'sessionStorage';
-  }
-
-  get storageContent(): string {
-    const raw = this.activeStorage.getItem(this.storageKey);
+  storageContent = computed(() => {
+    // Read config signals to trigger recalculation on any config change
+    const cfg = this.config();
+    cfg.$columns();
+    cfg.$sort();
+    cfg.$pageSize();
+    cfg.$pageIndex();
+    const storage = (this.selectedApi() === 'LocalStored' || this.selectedApi() === 'localStored') ? localStorage : sessionStorage;
+    const raw = storage.getItem(this.activeStorageKey());
     if (!raw) return '(empty)';
     try {
       return JSON.stringify(JSON.parse(raw), null, 2);
     } catch {
       return raw;
     }
-  }
-
-  setStorageMode(mode: string): void {
-    this.storageMode = mode as 'LocalStored' | 'SessionStored';
-  }
-
-  resetConfig(): void {
-    this.activeStorage.removeItem(this.storageKey);
-    const defaults = { ...PlaygroundComponent.DEFAULT_CONFIG, displayedColumns: ['name', 'age', 'email'] };
-    if (this.storageMode === 'LocalStored') {
-      this.localConfig = defaults;
-    } else {
-      this.sessionConfig = defaults;
-    }
-  }
-
-  // --- Signals helpers ---
-
-  setTheme(theme: string): void {
-    this.signalPrefs.theme = theme;
-  }
-
-  setLang(lang: string): void {
-    this.signalPrefs.lang = lang;
-  }
-
-  resetSignal(): void {
-    this.signalPrefs.theme = 'dark';
-    this.signalPrefs.lang = 'en';
-  }
+  });
 }
