@@ -28,7 +28,7 @@ function saveToDecoratorStorage<T>(storage: Storage, key: string, value: T, vers
   }
 }
 
-function storedDecorator(storage: Storage, version: number | undefined, id?: string) {
+function storedDecorator(storage: Storage, version: number | undefined, storageKey?: string) {
   return (target: any, key: string) => {
     let stored: {proxy: StoredSignal<any>; reload: (v: any) => void} | undefined;
     let currentKey = '';
@@ -40,7 +40,7 @@ function storedDecorator(storage: Storage, version: number | undefined, id?: str
         initialValue = val;
         if (!currentKey) {
           const uid = StoreService.userId();
-          currentKey = StoreService.getId(uid, target, key, id);
+          currentKey = StoreService.getId(uid, target, key, storageKey);
         }
         const loaded = loadFromDecoratorStorage(storage, currentKey, val, version);
         const {proxy, reload} = createTrackedProxy(loaded, (plainValue) => {
@@ -55,7 +55,7 @@ function storedDecorator(storage: Storage, version: number | undefined, id?: str
 
     // React to userId changes
     StoreService.onUserIdChange(uid => {
-      const newKey = StoreService.getId(uid, target, key, id);
+      const newKey = StoreService.getId(uid, target, key, storageKey);
       if (stored && newKey !== currentKey) {
         currentKey = newKey;
         const loaded = loadFromDecoratorStorage(storage, currentKey, initialValue, version);
@@ -68,10 +68,10 @@ function storedDecorator(storage: Storage, version: number | undefined, id?: str
   };
 }
 
-export function LocalStored(version: number, id?: string) {
-  return storedDecorator(getLocalStorage(), version, id);
+export function LocalStored(version: number, storageKey?: string) {
+  return storedDecorator(getLocalStorage(), version, storageKey);
 }
 
-export function SessionStored(id?: string) {
-  return storedDecorator(getSessionStorage(), undefined, id);
+export function SessionStored(storageKey?: string) {
+  return storedDecorator(getSessionStorage(), undefined, storageKey);
 }

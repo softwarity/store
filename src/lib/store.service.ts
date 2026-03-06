@@ -17,8 +17,8 @@ export abstract class StoreService {
     StoreService._userIdListeners.forEach(cb => cb(uid));
   }
 
-  static getId(userId: string | null, target: { constructor: { name: string } }, key: string, id?: string) {
-    const suffix = id || `${target.constructor.name}.${key}`;
+  static getId(userId: string | null, target: { constructor: { name: string } }, key: string, storageKey?: string) {
+    const suffix = storageKey || `${target.constructor.name}.${key}`;
     if (userId !== null && userId.length > 0) {
       return `${userId}_${suffix}`;
     }

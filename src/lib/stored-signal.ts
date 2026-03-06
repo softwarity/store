@@ -5,12 +5,19 @@ import {StoreService} from './store.service';
 // --- Types ---
 
 export interface StoredOptions {
-  id: string;
+  storageKey: string;
   injector?: Injector;
 }
 
+type StoredValue<T> =
+  T extends any[]
+    ? T
+    : T extends Record<string, any>
+      ? StoredSignal<T>
+      : T;
+
 export type StoredSignal<T extends Record<string, any>> = {
-  [K in keyof T]: T[K];
+  [K in keyof T]: StoredValue<T[K]>;
 } & {
   readonly [K in keyof T as `$${string & K}`]: Signal<T[K]>;
 };
@@ -31,11 +38,11 @@ export function getSessionStorage(): Storage {
   return sessionStorage;
 }
 
-function buildKey(userId: string | null, id: string): string {
+function buildKey(userId: string | null, storageKey: string): string {
   if (userId !== null && userId.length > 0) {
-    return `${userId}_${id}`;
+    return `${userId}_${storageKey}`;
   }
-  return id;
+  return storageKey;
 }
 
 function loadFromStorage<T>(storage: Storage, key: string, initialValue: T, version?: number): T {
@@ -87,7 +94,7 @@ export function toPlain(value: any): any {
   return result;
 }
 
-function trackValue(value: any, onMutate: () => void): any {
+function trackValue(value: any, onMutate: () => void, versionSig: Signal<number>): any {
   if (value === null || value === undefined || typeof value !== 'object') {
     return value;
   }
@@ -95,31 +102,42 @@ function trackValue(value: any, onMutate: () => void): any {
     return value;
   }
   if (Array.isArray(value)) {
-    return createTrackedArray(value, onMutate);
+    return createTrackedArray(value, onMutate, versionSig);
   }
-  return createTrackedObject(value, onMutate);
+  return createTrackedObject(value, onMutate, versionSig);
 }
 
-function createTrackedObject(obj: any, onMutate: () => void): any {
+function createTrackedObject(obj: any, onMutate: () => void, versionSig: Signal<number>): any {
   const target: any = {};
   for (const key of Object.keys(obj)) {
-    target[key] = trackValue(obj[key], onMutate);
+    target[key] = trackValue(obj[key], onMutate, versionSig);
   }
+  const propSignals: Record<string, Signal<any>> = {};
   return new Proxy(target, {
     get(t, prop) {
       if (prop === TRACKED) return true;
+      if (typeof prop === 'string' && prop.startsWith('$')) {
+        const key = prop.slice(1);
+        if (!propSignals[key]) {
+          propSignals[key] = computed(() => {
+            versionSig();
+            return toPlain(t[key]);
+          });
+        }
+        return propSignals[key];
+      }
       return t[prop as string];
     },
     set(t, prop, value) {
-      t[prop as string] = trackValue(value, onMutate);
+      t[prop as string] = trackValue(value, onMutate, versionSig);
       onMutate();
       return true;
     }
   });
 }
 
-function createTrackedArray(arr: any[], onMutate: () => void): any[] {
-  const target = arr.map(item => trackValue(item, onMutate));
+function createTrackedArray(arr: any[], onMutate: () => void, versionSig: Signal<number>): any[] {
+  const target = arr.map(item => trackValue(item, onMutate, versionSig));
   return new Proxy(target, {
     get(t, prop) {
       if (prop === TRACKED) return true;
@@ -131,7 +149,7 @@ function createTrackedArray(arr: any[], onMutate: () => void): any[] {
         onMutate();
         return true;
       }
-      t[prop as any] = trackValue(value, onMutate);
+      t[prop as any] = trackValue(value, onMutate, versionSig);
       onMutate();
       return true;
     }
@@ -152,9 +170,10 @@ export function createTrackedProxy<T extends Record<string, any>>(
     onSave(toPlain(trackedValue) as T);
   }
 
-  let trackedValue = createTrackedObject(initialValue, onMutate);
+  let trackedValue = createTrackedObject(initialValue, onMutate, versionSig);
 
-  // Per-property computed signals for $prop access
+  // Per-property computed signals for $prop access (top-level proxy needs its own
+  // because reload reassigns trackedValue — inner proxies read from their own target)
   const propComputeds: Record<string, Signal<any>> = {};
   for (const key of propKeys) {
     propComputeds[key] = computed(() => {
@@ -180,7 +199,7 @@ export function createTrackedProxy<T extends Record<string, any>>(
   }
 
   function reload(newValue: T) {
-    trackedValue = createTrackedObject(newValue, onMutate);
+    trackedValue = createTrackedObject(newValue, onMutate, versionSig);
     versionSig.update(v => v + 1);
   }
 
@@ -197,7 +216,7 @@ export function localStored<T extends Record<string, any>>(
   const injector = options.injector ?? inject(Injector);
 
   const userId = StoreService.userId();
-  let currentKey = buildKey(userId, options.id);
+  let currentKey = buildKey(userId, options.storageKey);
   const loaded = loadFromStorage<T>(storage, currentKey, initialValue, options.version);
 
   const {proxy, reload} = createTrackedProxy<T>(loaded, (plainValue) => {
@@ -214,7 +233,7 @@ export function localStored<T extends Record<string, any>>(
   // React to userId changes via effect (auto-cleanup)
   effect(() => {
     const newUserId = StoreService.userId();
-    const newKey = buildKey(newUserId, options.id);
+    const newKey = buildKey(newUserId, options.storageKey);
     if (newKey !== currentKey) {
       currentKey = newKey;
       const reloaded = loadFromStorage<T>(storage, currentKey, initialValue, options.version);
@@ -233,7 +252,7 @@ export function sessionStored<T extends Record<string, any>>(
   const injector = options.injector ?? inject(Injector);
 
   const userId = StoreService.userId();
-  let currentKey = buildKey(userId, options.id);
+  let currentKey = buildKey(userId, options.storageKey);
   const loaded = loadFromStorage<T>(storage, currentKey, initialValue, undefined);
 
   const {proxy, reload} = createTrackedProxy<T>(loaded, (plainValue) => {
@@ -249,7 +268,7 @@ export function sessionStored<T extends Record<string, any>>(
   // React to userId changes via effect (auto-cleanup)
   effect(() => {
     const newUserId = StoreService.userId();
-    const newKey = buildKey(newUserId, options.id);
+    const newKey = buildKey(newUserId, options.storageKey);
     if (newKey !== currentKey) {
       currentKey = newKey;
       const reloaded = loadFromStorage<T>(storage, currentKey, initialValue, undefined);

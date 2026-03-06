@@ -50,6 +50,13 @@ describe('Test LocalStored', () => {
     const stored = JSON.parse(localStorage.getItem('USER_test-arr') || '{}');
     expect(stored.items[0]).toBe('z');
   });
+
+  it('should expose nested $prop signals via decorator', () => {
+    expect((component.localNested.sort as any).$column()).toBe('name');
+    expect((component.localNested.sort as any).$direction()).toBe('asc');
+    component.localNested.sort.column = 'age';
+    expect((component.localNested.sort as any).$column()).toBe('age');
+  });
 });
 describe('Test SessionStored', () => {
   let component: TestComponent;

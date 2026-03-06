@@ -37,8 +37,13 @@
 
     <!-- Description Section -->
     <p class="description">
-      Persist component properties to browser storage with <code>decorators</code> or <code>signals</code>.
-      Let your users customize tables, filters, or preferences — their choices are saved automatically and restored on page reload.
+      <code>&#64;softwarity/store</code> lets you persist UI preferences (visible columns, sort order, page size, filters, sidebar state…)
+      directly in the browser — no server-side persistence needed. No API endpoints, no database tables, no extra round-trips: everything stays client-side, where UI preferences belong.
+    </p>
+    <p class="description">
+      A single <code>decorator</code> or <code>function call</code> is all it takes.
+      Annotate a property — or wrap an object with <code>localStored()</code> / <code>sessionStored()</code> — and every mutation (including nested properties and array methods) is automatically persisted to browser storage and restored on reload.
+      No manual <code>getItem</code> / <code>setItem</code>, no boilerplate serialization logic — <code>&#64;softwarity/store</code> handles it all for you.
     </p>
 
     <!-- Playground (lazy-loaded) -->

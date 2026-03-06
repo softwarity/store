@@ -1,6 +1,9 @@
 <section class="documentation">
   <h2>Documentation</h2>
 
+  <p><code>@softwarity/store</code> lets you persist UI preferences (visible columns, sort order, page size, filters, sidebar state…) directly in the browser — no server-side persistence needed. No API endpoints, no database tables, no extra round-trips: everything stays client-side, where UI preferences belong.</p>
+  <p>A single decorator or function call is all it takes. Annotate a property — or wrap an object with <code>localStored()</code> / <code>sessionStored()</code> — and every mutation (including nested properties and array methods) is automatically persisted to browser storage and restored on reload. No manual <code>getItem</code> / <code>setItem</code>, no boilerplate serialization logic — <code>@softwarity/store</code> handles it all for you.</p>
+
   <!-- Installation -->
   <article class="doc-section">
     <h3>Installation</h3>
@@ -34,7 +37,8 @@ export class AppModule {}</textarea>
   <!-- User-scoped storage -->
   <article class="doc-section">
     <h3>User-scoped storage</h3>
-    <p>To prefix all storage keys with a user ID, pass a signal factory. This isolates data per user (e.g. after login).</p>
+    <p>Browser storage is shared across all users on the same browser profile. On shared workstations or kiosk machines, multiple people may log in to the same app one after another. Without scoping, one user's persisted preferences (columns, filters, sort order…) would leak to the next user.</p>
+    <p>By providing a <code>userId</code> signal, every storage key is automatically prefixed (<code>userId_storageKey</code>). When the user changes (login / logout / switch), the library reloads each stored object from the new user's namespace — preferences follow the user, not the machine.</p>
 
     <h4>Standalone</h4>
     <interactive-code language="typescript">
@@ -136,7 +140,7 @@ config = { columns: ['name', 'age'], sort: 'asc', filter: null };</textarea>
   <!-- =============================== -->
   <article class="doc-section">
     <h3>Stored API — localStored / sessionStored</h3>
-    <p>Same deep mutation tracking as decorators, but <strong>without annotations</strong>. Returns a <code>StoredSignal&lt;T&gt;</code> with plain property access, deep tracking on nested objects and arrays, and <code>$prop()</code> reactive signals for templates.</p>
+    <p>Same deep mutation tracking as decorators, but <strong>without annotations</strong>. Returns a <code>StoredSignal&lt;T&gt;</code> with plain property access, deep tracking on nested objects and arrays, and <code>$prop()</code> reactive signals at every nesting level for templates.</p>
 
     <interactive-code language="typescript">
       <textarea>import { localStored, sessionStored } from '@softwarity/store';
@@ -146,15 +150,17 @@ export class MyComponent {
 
   // localStorage + deep tracking + schema versioning
   // Increment version to discard stale data when the schema changes.
+  // storageKey is required: functions don't have access to ClassName.property,
+  // unlike decorators which auto-generate it.
   config = localStored(
     { columns: ['name', 'age'], sort: { active: 'name', direction: 'asc' } },
-    { id: 'table-config', version: 1 }
+    { storageKey: 'table-config', version: 1 }
   );
 
   // sessionStorage + deep tracking (no schema versioning needed)
   wizard = sessionStored(
     { step: 1, draft: '' },
-    { id: 'wizard-state' }
+    { storageKey: 'wizard-state' }
   );
 
   // Deep mutations tracked automatically:
@@ -187,13 +193,13 @@ export class MyComponent {
         </thead>
         <tbody>
           <tr>
-            <td><code>&#64;LocalStored(schemaVersion, id?)</code></td>
-            <td><code>schemaVersion: number</code>, <code>id?: string</code></td>
+            <td><code>&#64;LocalStored(schemaVersion, storageKey?)</code></td>
+            <td><code>schemaVersion: number</code>, <code>storageKey?: string</code></td>
             <td>localStorage</td>
           </tr>
           <tr>
-            <td><code>&#64;SessionStored(id?)</code></td>
-            <td><code>id?: string</code></td>
+            <td><code>&#64;SessionStored(storageKey?)</code></td>
+            <td><code>storageKey?: string</code></td>
             <td>sessionStorage</td>
           </tr>
         </tbody>
@@ -212,14 +218,14 @@ export class MyComponent {
         </thead>
         <tbody>
           <tr>
-            <td><code>localStored(initial, {{ '{' }}id, version{{ '}' }})</code></td>
+            <td><code>localStored(initial, {{ '{' }}storageKey, version{{ '}' }})</code></td>
             <td><code>StoredSignal&lt;T&gt;</code></td>
-            <td>localStorage + deep mutation tracking + schema versioning + <code>$prop()</code> signals.</td>
+            <td>localStorage + deep mutation tracking + schema versioning + <code>$prop()</code> signals. <code>storageKey</code> is required (functions don't have access to <code>ClassName.property</code>).</td>
           </tr>
           <tr>
-            <td><code>sessionStored(initial, {{ '{' }}id{{ '}' }})</code></td>
+            <td><code>sessionStored(initial, {{ '{' }}storageKey{{ '}' }})</code></td>
             <td><code>StoredSignal&lt;T&gt;</code></td>
-            <td>sessionStorage + deep mutation tracking + <code>$prop()</code> signals.</td>
+            <td>sessionStorage + deep mutation tracking + <code>$prop()</code> signals. <code>storageKey</code> is required (functions don't have access to <code>ClassName.property</code>).</td>
           </tr>
         </tbody>
       </table>
@@ -275,14 +281,14 @@ export class MyComponent {
             <td><code>userId_ClassName.property</code></td>
           </tr>
           <tr>
-            <td>Decorators (custom id)</td>
-            <td><code>customId</code></td>
-            <td><code>userId_customId</code></td>
+            <td>Decorators (custom storageKey)</td>
+            <td><code>storageKey</code></td>
+            <td><code>userId_storageKey</code></td>
           </tr>
           <tr>
-            <td>Stored functions (<code>localStored</code>/<code>sessionStored</code>)</td>
-            <td><code>options.id</code></td>
-            <td><code>userId_options.id</code></td>
+            <td><code>localStored</code> / <code>sessionStored</code></td>
+            <td><code>storageKey</code></td>
+            <td><code>userId_storageKey</code></td>
           </tr>
         </tbody>
       </table>
@@ -314,7 +320,7 @@ export class MyComponent {
   <article class="doc-section">
     <h3>Features</h3>
     <ul class="feature-list">
-      <li><strong>Decorator API</strong> — <code>&#64;LocalStored</code> / <code>&#64;SessionStored</code> with deep mutation tracking on nested objects and arrays, plus <code>$prop()</code> reactive signals</li>
+      <li><strong>Decorator API</strong> — <code>&#64;LocalStored</code> / <code>&#64;SessionStored</code> with deep mutation tracking on nested objects and arrays, plus <code>$prop()</code> reactive signals at every nesting level</li>
       <li><strong>Stored API</strong> — <code>localStored()</code> / <code>sessionStored()</code> — same deep mutation tracking and <code>$prop()</code> signals as decorators, but without annotations</li>
       <li><strong>Schema versioning</strong> — Increment the schema version to discard stale data when the schema changes</li>
       <li><strong>User-scoped</strong> — Prefix storage keys with a user ID via <code>provideStore({{ '{' }} userId: () => mySignal {{ '}' }})</code></li>

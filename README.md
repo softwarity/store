@@ -4,7 +4,9 @@
 [![Publish to NPM](https://github.com/softwarity/store/actions/workflows/tag.yml/badge.svg)](https://github.com/softwarity/store/actions/workflows/tag.yml)
 [![npm version](https://badge.fury.io/js/@softwarity%2Fstore.svg)](https://badge.fury.io/js/@softwarity%2Fstore)
 
-Persist component properties to browser storage with **decorators** or **signals**. Let your users customize tables, filters, or preferences — their choices are saved automatically and restored on page reload.
+`@softwarity/store` lets you persist UI preferences (visible columns, sort order, page size, filters, sidebar state…) directly in the browser — no server-side persistence needed. No API endpoints, no database tables, no extra round-trips: everything stays client-side, where UI preferences belong.
+
+A single decorator or function call is all it takes. Annotate a property — or wrap an object with `localStored()` / `sessionStored()` — and every mutation (including nested properties and array methods) is automatically persisted to browser storage and restored on reload. No manual `getItem` / `setItem`, no boilerplate serialization logic — `@softwarity/store` handles it all for you.
 
 **[Live demo](https://softwarity.github.io/store/)**
 
@@ -72,6 +74,9 @@ export class MyComponent {
   // Custom storage key (instead of auto-generated ClassName.property)
   @LocalStored(1, 'shared-config')
   sharedConfig = { theme: 'dark' };
+
+  // Note: decorators auto-generate the key as ClassName.property.
+  // Use the optional storageKey parameter to override it.
 }
 ```
 
@@ -86,15 +91,17 @@ import { localStored, sessionStored } from '@softwarity/store';
 export class MyComponent {
 
   // localStorage + deep tracking + schema versioning
+  // storageKey is required: functions don't have access to ClassName.property,
+  // unlike decorators which auto-generate it.
   config = localStored(
     { columns: ['name', 'age'], sort: { active: 'name', direction: 'asc' } },
-    { id: 'table-config', version: 1 }
+    { storageKey: 'table-config', version: 1 }
   );
 
   // sessionStorage + deep tracking
   wizard = sessionStored(
     { step: 1, draft: '' },
-    { id: 'wizard-state' }
+    { storageKey: 'wizard-state' }
   );
 }
 ```
@@ -119,16 +126,26 @@ this.config = { ... };                        // root reassignment (use property
 
 ## `$prop()` reactive signals
 
-Both APIs expose `$`-prefixed signals for each top-level property, ideal for template bindings:
+Both APIs expose `$`-prefixed signals at **every level of depth**, ideal for template bindings:
 
 ```html
+<!-- Top-level signals -->
 <mat-header-row *matHeaderRowDef="config.$columns()"></mat-header-row>
 <mat-paginator
   [pageSize]="config.$pageSize()"
   [pageIndex]="config.$pageIndex()"
   (page)="onPage($event)">
 </mat-paginator>
+
+<!-- Nested object signals -->
+<mat-table matSort
+  [matSortActive]="config.sort.$column()"
+  [matSortDirection]="config.sort.$direction()"
+  (matSortChange)="onSort($event)">
+</mat-table>
 ```
+
+Nested signals are available at any depth (`config.a.b.$c()`). Each signal returns the plain value of the property (via `toPlain`), and updates reactively whenever the property or any of its descendants is mutated.
 
 ## Schema version management
 
@@ -148,7 +165,9 @@ Only `@LocalStored` and `localStored()` support schema versioning. `@SessionStor
 
 ## User-scoped storage
 
-To prefix all storage keys with a user ID, pass a signal factory. This isolates data per user.
+Browser storage (`localStorage` / `sessionStorage`) is shared across all users on the same browser profile. On shared workstations or kiosk machines, multiple people may log in to the same app one after another. Without scoping, user A's persisted preferences (columns, filters, sort order…) would leak to user B.
+
+By providing a `userId` signal, every storage key is automatically prefixed with the current user's identifier (`userId_storageKey`). When the user changes (login / logout / switch), the library reloads each stored object from the new user's namespace — so preferences follow the user, not the machine.
 
 ### Standalone
 
@@ -183,8 +202,8 @@ export class AppModule {}
 | API | Without userId | With userId |
 |---|---|---|
 | Decorators (auto) | `ClassName.property` | `userId_ClassName.property` |
-| Decorators (custom id) | `customId` | `userId_customId` |
-| Stored functions (`localStored`/`sessionStored`) | `options.id` | `userId_options.id` |
+| Decorators (custom storageKey) | `storageKey` | `userId_storageKey` |
+| `localStored` / `sessionStored` | `storageKey` | `userId_storageKey` |
 
 ## Cross-tab sync
 

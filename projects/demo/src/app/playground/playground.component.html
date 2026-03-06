@@ -71,13 +71,14 @@ export class MyComponent {
   // → localStorage
   // Same deep tracking as decorators, no annotation needed.
   // Requires Angular injection context.
-  // id: storage key — use the same key across components
-  // to share a persisted config.
+  // storageKey is required: functions don't have access
+  // to ClassName.property, unlike decorators which auto-generate it.
+  // Use the same key across components to share a persisted config.
   config = localStored(
     { columns: ['name', 'age', 'email'],
       sort: { column: 'name', direction: 'asc' },
       pageSize: 5, pageIndex: 0 },
-    { id: 'demo-stored-local', version: 1 }
+    { storageKey: 'demo-stored-local', version: 1 }
   );
 
   this.config.sort.direction = 'desc';       // nested → persists!
@@ -93,60 +94,66 @@ export class MyComponent {
 
   // → sessionStorage (lives only for the current browser tab)
   // No schema version needed: data is short-lived.
-  // id: storage key — use the same key across components
-  // to share a persisted config.
+  // storageKey is required: functions don't have access
+  // to ClassName.property, unlike decorators which auto-generate it.
+  // Use the same key across components to share a persisted config.
   config = sessionStored(
     { columns: ['name', 'age', 'email'],
       sort: { column: 'name', direction: 'asc' },
       pageSize: 5, pageIndex: 0 },
-    { id: 'demo-stored-session' }
+    { storageKey: 'demo-stored-session' }
   );
 
   this.config.sort.column = 'age';           // nested → persists!
   this.config.columns.splice(0, 1);          // array → persists!
 }</textarea>
-    <textarea>// my.component.html — $prop() signals provide reactive bindings
-
-// pagedData is a computed() signal derived from config.$sort(),
-// config.$pageSize() and config.$pageIndex().
-
-&lt;mat-table [dataSource]="pagedData()"&gt;
-  &#64;for (col of allColumns; track col.key) {
-    &lt;ng-container [matColumnDef]="col.key"&gt;
-      &lt;mat-header-cell *matHeaderCellDef (click)="setSort(col.key)"&gt;
-        &#123;&#123; col.label &#125;&#125;
-      &lt;/mat-header-cell&gt;
-      &lt;mat-cell *matCellDef="let row"&gt;
-        &#123;&#123; row[col.key] &#125;&#125;
-      &lt;/mat-cell&gt;
-    &lt;/ng-container&gt;
-  }
-  &lt;mat-header-row *matHeaderRowDef="config.$columns()"&gt;&lt;/mat-header-row&gt;
-  &lt;mat-row *matRowDef="let row; columns: config.$columns()"&gt;&lt;/mat-row&gt;
-&lt;/mat-table&gt;
-
-&lt;mat-paginator
-  [pageSize]="config.$pageSize()"
-  [pageIndex]="config.$pageIndex()"
-  (page)="onPage($event)"&gt;
-&lt;/mat-paginator&gt;</textarea>
     <code-binding key="api" type="select" options="LocalStored,SessionStored,localStored,sessionStored" value="LocalStored" carousel (change)="setApi($any($event).detail)"></code-binding>
+  </interactive-code>
+
+  <interactive-code language="html" ngNonBindable>
+    <textarea><!-- my.component.html — $prop() signals at every depth -->
+
+<!-- pagedData is a computed() signal derived from config.sort.$column(),
+     config.sort.$direction(), config.$pageSize() and config.$pageIndex(). -->
+
+<mat-table [dataSource]="pagedData()" 
+  matSort [matSortActive]="config.sort.$column()" [matSortDirection]="config.sort.$direction()" (matSortChange)="onSort($event)">
+  <ng-container matColumnDef="name">
+    <mat-header-cell *matHeaderCellDef mat-sort-header>Name</mat-header-cell>
+    <mat-cell *matCellDef="let row">{{ row.name }}</mat-cell>
+  </ng-container>
+  <ng-container matColumnDef="age">
+    <mat-header-cell *matHeaderCellDef mat-sort-header>Age</mat-header-cell>
+    <mat-cell *matCellDef="let row">{{ row.age }}</mat-cell>
+  </ng-container>
+  <ng-container matColumnDef="email">
+    <mat-header-cell *matHeaderCellDef mat-sort-header>Email</mat-header-cell>
+    <mat-cell *matCellDef="let row">{{ row.email }}</mat-cell>
+  </ng-container>
+  <ng-container matColumnDef="role">
+    <mat-header-cell *matHeaderCellDef mat-sort-header>Role</mat-header-cell>
+    <mat-cell *matCellDef="let row">{{ row.role }}</mat-cell>
+  </ng-container>
+  <ng-container matColumnDef="status">
+    <mat-header-cell *matHeaderCellDef mat-sort-header>Status</mat-header-cell>
+    <mat-cell *matCellDef="let row">{{ row.status }}</mat-cell>
+  </ng-container>
+  <!-- Only columns listed in config.$columns() are displayed -->
+  <mat-header-row *matHeaderRowDef="config.$columns()"></mat-header-row>
+  <mat-row *matRowDef="let row; columns: config.$columns()"></mat-row>
+</mat-table>
+<!-- Mat Paginator — connected via $prop() signals -->
+<mat-paginator [pageSize]="config.$pageSize()" [pageIndex]="config.$pageIndex()" (page)="onPage($event)"></mat-paginator>
+    </textarea>
   </interactive-code>
 
   <!-- Table -->
   <div class="table-wrapper">
-    <mat-table [dataSource]="pagedData()">
+    <mat-table [dataSource]="pagedData()" matSort [matSortActive]="config().sort.$column()" [matSortDirection]="config().sort.$direction()" (matSortChange)="onSort($event)">
       @for (col of allColumns; track col.key) {
         <ng-container [matColumnDef]="col.key">
-          <mat-header-cell *matHeaderCellDef (click)="setSort(col.key)">
-            <span class="th-content">
-              {{ col.label }}
-              @if (config().$sort().column === col.key) {
-                <mat-icon class="sort-icon">
-                  {{ config().$sort().direction === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                </mat-icon>
-              }
-            </span>
+          <mat-header-cell *matHeaderCellDef mat-sort-header>
+            {{ col.label }}
           </mat-header-cell>
           <mat-cell *matCellDef="let row">
             @if (col.key === 'status') {

@@ -4,6 +4,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatSortModule, Sort } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
 import { LocalStored, SessionStored, localStored, sessionStored } from '@softwarity/store';
 import { registerInteractiveCode } from '@softwarity/interactive-code';
@@ -34,7 +35,7 @@ const EMPLOYEES: Employee[] = [
 ];
 
 @Component({
-  imports: [MatButtonModule, MatCheckboxModule, MatIconModule, MatMenuModule, MatPaginatorModule, MatTableModule],
+  imports: [MatButtonModule, MatCheckboxModule, MatIconModule, MatMenuModule, MatPaginatorModule, MatSortModule, MatTableModule],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './playground.component.html',
   styleUrl: './playground.component.scss'
@@ -61,8 +62,8 @@ export class PlaygroundComponent {
   @SessionStored('demo-decorator-session')
   private _decoratorSession = PlaygroundComponent.defaults();
 
-  private _storedLocal = localStored(PlaygroundComponent.defaults(), {id: 'demo-stored-local', version: 1});
-  private _storedSession = sessionStored(PlaygroundComponent.defaults(), {id: 'demo-stored-session'});
+  private _storedLocal = localStored(PlaygroundComponent.defaults(), {storageKey: 'demo-stored-local', version: 1});
+  private _storedSession = sessionStored(PlaygroundComponent.defaults(), {storageKey: 'demo-stored-session'});
 
   // --- API selector ---
 
@@ -88,11 +89,10 @@ export class PlaygroundComponent {
 
   pagedData = computed(() => {
     const cfg = this.config();
-    const sort = cfg.$sort();
+    const col = cfg.sort.$column();
+    const dir = cfg.sort.$direction() === 'desc' ? -1 : 1;
     const ps = cfg.$pageSize();
     const pi = cfg.$pageIndex();
-    const col = sort.column;
-    const dir = sort.direction === 'desc' ? -1 : 1;
     const sorted = [...EMPLOYEES].sort((a: any, b: any) => {
       const va = a[col];
       const vb = b[col];
@@ -116,14 +116,10 @@ export class PlaygroundComponent {
 
   // --- Sort helpers ---
 
-  setSort(column: string): void {
+  onSort(event: Sort): void {
     const cfg = this.config();
-    if (cfg.sort.column === column) {
-      cfg.sort.direction = cfg.sort.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-      cfg.sort.column = column;
-      cfg.sort.direction = 'asc';
-    }
+    cfg.sort.column = event.active;
+    cfg.sort.direction = event.direction || 'asc';
   }
 
   // --- Pagination helpers ---
@@ -166,7 +162,8 @@ export class PlaygroundComponent {
     // Read config signals to trigger recalculation on any config change
     const cfg = this.config();
     cfg.$columns();
-    cfg.$sort();
+    cfg.sort.$column();
+    cfg.sort.$direction();
     cfg.$pageSize();
     cfg.$pageIndex();
     const storage = (this.selectedApi() === 'LocalStored' || this.selectedApi() === 'localStored') ? localStorage : sessionStorage;
