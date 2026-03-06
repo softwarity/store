@@ -1,5 +1,9 @@
 # Release Notes
 
+## 1.19.2
+
+---
+
 ## 1.19.1
 
 ### Recursive `$prop()` signals
