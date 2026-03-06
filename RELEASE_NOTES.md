@@ -6,6 +6,18 @@
 
 ## 1.19.2
 
+### Storage key rename
+
+- Internal storage key `_schemaVersion` renamed to `_version` for consistency with the public API parameter name
+
+### Documentation
+
+- "Schema version management" renamed to "Version management" across all docs
+- Clarified that version should be incremented when the object structure **or the default values** change (not just schema)
+- Added example showing version bump for default value changes
+- Playground: separated interactive-code into TypeScript and HTML blocks
+- Playground: uses `ngNonBindable` for the HTML code sample
+
 ---
 
 ## 1.19.1
