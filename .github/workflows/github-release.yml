@@ -14,10 +14,14 @@ jobs:
     name: Create/Update GitHub Release
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve latest tag
+      - name: Resolve tag
         id: tag
         run: |
-          TAG=$(git ls-remote --tags --sort=-v:refname https://github.com/${{ github.repository }} 'refs/tags/v*' | head -1 | sed 's|.*refs/tags/||')
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG=${GITHUB_REF#refs/tags/}
+          else
+            TAG=$(git ls-remote --tags --sort=-v:refname https://github.com/${{ github.repository }} 'refs/tags/v*' | head -1 | sed 's|.*refs/tags/||')
+          fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=${TAG#v}" >> $GITHUB_OUTPUT
           echo "Resolved tag: $TAG"
@@ -25,7 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.tag.outputs.tag }}
+          ref: ${{ github.event_name == 'push' && steps.tag.outputs.tag || github.ref }}
 
       - name: Extract release notes
         id: notes
