@@ -2,9 +2,35 @@
 
 ## 1.19.1
 
----
+### Recursive `$prop()` signals
 
-## 1.19.1
+`$prop()` reactive signals are now available at **every nesting level**, not just the top-level properties.
+
+```typescript
+// Before: only top-level signals
+config.$sort()           // Signal<{column: string, direction: string}>
+config.$sort().column    // read column from the signal value
+
+// After: signals at every depth
+config.sort.$column()    // Signal<string> — direct nested signal
+config.sort.$direction() // Signal<string>
+config.a.b.$c()          // works at any depth
+```
+
+- Signals are created lazily via the Proxy `get` trap (no overhead for unused properties)
+- Stored in a closure map — invisible to `Object.keys()` / `toPlain()`
+- `versionSig` is propagated through the entire tracking chain for reactivity
+- Works with both decorator API (`@LocalStored` / `@SessionStored`) and function API (`localStored()` / `sessionStored()`)
+- `StoredSignal<T>` type is now recursive for nested objects (arrays keep original element type for assignment compatibility)
+
+### API rename
+
+- `StoredOptions.id` renamed to `StoredOptions.storageKey` for clarity
+
+### CI/CD
+
+- `deploy-demo.yml` now builds demo from local library source instead of published NPM package
+- `github-release.yml` now triggers automatically on version tags (`v*`) in addition to manual dispatch
 
 ---
 
