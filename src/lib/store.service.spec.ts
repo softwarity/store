@@ -263,7 +263,7 @@ describe('StoreService', () => {
   });
 
   it('Version mismatch overwrites storage with new config', () => {
-    localStorage.setItem('test', JSON.stringify({_schemaVersion: 1, foo: 'old'}));
+    localStorage.setItem('test', JSON.stringify({_version: 1, foo: 'old'}));
     const res = service.loadCfg({version: 2, id: 'test', foo: 'new', extra: true});
     expect(res.foo).toEqual('new');
     expect(res.extra).toBe(true);
@@ -369,7 +369,7 @@ describe('StoreService', () => {
   });
 
   it('loadCfg with undefined version loads from storage regardless of stored version', () => {
-    localStorage.setItem('test', JSON.stringify({_schemaVersion: 5, foo: 'stored'}));
+    localStorage.setItem('test', JSON.stringify({_version: 5, foo: 'stored'}));
     const res = service.loadCfg({id: 'test', foo: 'default'});
     expect(res.foo).toEqual('stored');
   });

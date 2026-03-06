@@ -105,7 +105,7 @@ describe('Test LocalStored reads pre-existing storage', () => {
 
   beforeEach(async () => {
     // Pre-populate localStorage with a previously saved value (including id, as saveCfg does)
-    localStorage.setItem('USER_test0', JSON.stringify({_schemaVersion: 1, id: 'USER_test0', foo: 42}));
+    localStorage.setItem('USER_test0', JSON.stringify({_version: 1, id: 'USER_test0', foo: 42}));
 
     StoreService.userId.set(null);
     await TestBed.configureTestingModule({

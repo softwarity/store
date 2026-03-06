@@ -52,8 +52,8 @@ function loadFromStorage<T>(storage: Storage, key: string, initialValue: T, vers
   }
   try {
     const parsed = JSON.parse(entry);
-    if (version === undefined || parsed._schemaVersion === version) {
-      const {_schemaVersion, ...data} = parsed;
+    if (version === undefined || parsed._version === version) {
+      const {_version, ...data} = parsed;
       return data as T;
     }
     return initialValue;
@@ -65,7 +65,7 @@ function loadFromStorage<T>(storage: Storage, key: string, initialValue: T, vers
 
 function saveToStorage<T>(storage: Storage, key: string, value: T, version?: number): void {
   try {
-    const toStore = version !== undefined ? {...value, _schemaVersion: version} : {...value};
+    const toStore = version !== undefined ? {...value, _version: version} : {...value};
     storage.setItem(key, JSON.stringify(toStore));
   } catch (e) {
     console.warn(`@softwarity/store: Failed to save signal (key: ${key}).`, e);

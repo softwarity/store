@@ -80,8 +80,8 @@ export class AppModule {}</textarea>
 @Component({ ... })
 export class MyComponent {
 
-  // localStorage — schema version 1
-  // Increment to discard stale data when the schema changes.
+  // localStorage — version 1
+  // Increment to discard stale data when the structure or defaults change.
   @LocalStored(1)
   tableConfig = {
     columns: ['name', 'age'],
@@ -89,7 +89,7 @@ export class MyComponent {
     pageSize: 25
   };
 
-  // sessionStorage (no versioning, lives for the session)
+  // sessionStorage (no version needed, lives for the session)
   @SessionStored()
   filters = { search: '', category: 'all' };
 
@@ -119,20 +119,24 @@ this.config = { ... };                        // root reassignment</textarea>
     </interactive-code>
   </article>
 
-  <!-- Schema version management -->
+  <!-- Version management -->
   <article class="doc-section">
-    <h3>Schema version management</h3>
-    <p>When the schema changes, increment the schema version. Old stored data is discarded and replaced with the new defaults.</p>
+    <h3>Version management</h3>
+    <p>Increment the version whenever the object structure or the default values change. Old stored data is discarded and replaced with the new defaults.</p>
     <interactive-code language="typescript">
-      <textarea>// Schema version 1: initial schema
+      <textarea>// Version 1: initial structure
 @LocalStored(1)
 config = { columns: ['name', 'age'], sort: 'asc' };
 
-// Schema version 2: added filter — stale browser data is discarded
+// Version 2: added filter — stale browser data is discarded
 @LocalStored(2)
-config = { columns: ['name', 'age'], sort: 'asc', filter: null };</textarea>
+config = { columns: ['name', 'age'], sort: 'asc', filter: null };
+
+// Version 3: default columns changed — users get the new defaults
+@LocalStored(3)
+config = { columns: ['name', 'age', 'email'], sort: 'asc', filter: null };</textarea>
     </interactive-code>
-    <p>Only <code>&#64;LocalStored</code> and <code>localStored()</code> support schema versioning. <code>&#64;SessionStored</code> and <code>sessionStored()</code> do not need it (data is short-lived).</p>
+    <p>Only <code>&#64;LocalStored</code> and <code>localStored()</code> support versioning. <code>&#64;SessionStored</code> and <code>sessionStored()</code> do not need it (data is short-lived).</p>
   </article>
 
   <!-- =============================== -->
@@ -148,8 +152,8 @@ config = { columns: ['name', 'age'], sort: 'asc', filter: null };</textarea>
 @Component({ ... })
 export class MyComponent {
 
-  // localStorage + deep tracking + schema versioning
-  // Increment version to discard stale data when the schema changes.
+  // localStorage + deep tracking + versioning
+  // Increment version to discard stale data when the structure or defaults change.
   // storageKey is required: functions don't have access to ClassName.property,
   // unlike decorators which auto-generate it.
   config = localStored(
@@ -157,7 +161,7 @@ export class MyComponent {
     { storageKey: 'table-config', version: 1 }
   );
 
-  // sessionStorage + deep tracking (no schema versioning needed)
+  // sessionStorage + deep tracking (no versioning needed)
   wizard = sessionStored(
     { step: 1, draft: '' },
     { storageKey: 'wizard-state' }
@@ -193,8 +197,8 @@ export class MyComponent {
         </thead>
         <tbody>
           <tr>
-            <td><code>&#64;LocalStored(schemaVersion, storageKey?)</code></td>
-            <td><code>schemaVersion: number</code>, <code>storageKey?: string</code></td>
+            <td><code>&#64;LocalStored(version, storageKey?)</code></td>
+            <td><code>version: number</code>, <code>storageKey?: string</code></td>
             <td>localStorage</td>
           </tr>
           <tr>
@@ -220,7 +224,7 @@ export class MyComponent {
           <tr>
             <td><code>localStored(initial, {{ '{' }}storageKey, version{{ '}' }})</code></td>
             <td><code>StoredSignal&lt;T&gt;</code></td>
-            <td>localStorage + deep mutation tracking + schema versioning + <code>$prop()</code> signals. <code>storageKey</code> is required (functions don't have access to <code>ClassName.property</code>).</td>
+            <td>localStorage + deep mutation tracking + versioning + <code>$prop()</code> signals. <code>storageKey</code> is required (functions don't have access to <code>ClassName.property</code>).</td>
           </tr>
           <tr>
             <td><code>sessionStored(initial, {{ '{' }}storageKey{{ '}' }})</code></td>
@@ -322,7 +326,7 @@ export class MyComponent {
     <ul class="feature-list">
       <li><strong>Decorator API</strong> — <code>&#64;LocalStored</code> / <code>&#64;SessionStored</code> with deep mutation tracking on nested objects and arrays, plus <code>$prop()</code> reactive signals at every nesting level</li>
       <li><strong>Stored API</strong> — <code>localStored()</code> / <code>sessionStored()</code> — same deep mutation tracking and <code>$prop()</code> signals as decorators, but without annotations</li>
-      <li><strong>Schema versioning</strong> — Increment the schema version to discard stale data when the schema changes</li>
+      <li><strong>Versioning</strong> — Increment the version to discard stale data when the structure or defaults change</li>
       <li><strong>User-scoped</strong> — Prefix storage keys with a user ID via <code>provideStore({{ '{' }} userId: () => mySignal {{ '}' }})</code></li>
       <li><strong>Cross-tab sync</strong> — <code>onStorageChange()</code> for localStorage changes from other tabs</li>
       <li><strong>Error resilient</strong> — Handles corrupted JSON and QuotaExceededError gracefully</li>

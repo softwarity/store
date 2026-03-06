@@ -33,10 +33,10 @@ export abstract class StoreService {
     if (entry !== null) {
       try {
         const fromStore: any = JSON.parse(entry);
-        // Remap _schemaVersion → version for in-memory use
-        if (fromStore._schemaVersion !== undefined) {
-          fromStore.version = fromStore._schemaVersion;
-          delete fromStore._schemaVersion;
+        // Remap _version → version for in-memory use for in-memory use
+        if (fromStore._version !== undefined) {
+          fromStore.version = fromStore._version;
+          delete fromStore._version;
         }
         if (currentCfg.version === undefined || currentCfg.version === fromStore.version) {
           currentCfg = fromStore;
@@ -111,9 +111,9 @@ export abstract class StoreService {
   private saveCfg(root: any) {
     try {
       const json = this.toJson(root);
-      // Rename version → _schemaVersion for storage
+      // Rename version → _version for storage
       if (json && json.version !== undefined) {
-        json._schemaVersion = json.version;
+        json._version = json.version;
         delete json.version;
       }
       this.getStorage().setItem(`${root.id}`, JSON.stringify(json));

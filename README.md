@@ -15,7 +15,7 @@ A single decorator or function call is all it takes. Annotate a property — or 
 - **Decorator API** — `@LocalStored` / `@SessionStored` with deep mutation tracking and `$prop()` reactive signals
 - **Stored API** — `localStored()` / `sessionStored()` — same deep tracking and `$prop()` signals, without annotations
 - **Deep mutation tracking** — Native `Proxy`-based: nested properties, array methods, direct index assignment (`arr[0] = 'x'`), and new properties all trigger saves automatically
-- **Schema versioning** — Increment the schema version to discard stale data when the schema changes
+- **Versioning** — Increment the version to discard stale data when the structure or defaults change
 - **User-scoped storage** — Prefix storage keys with a user ID
 - **Cross-tab sync** — `onStorageChange()` for localStorage changes from other tabs
 - **SSR compatible** — `FakeStorage` fallback when `window` is undefined
@@ -58,8 +58,8 @@ import { LocalStored, SessionStored } from '@softwarity/store';
 @Component({ ... })
 export class MyComponent {
 
-  // localStorage — schema version 1
-  // Increment to discard stale data when the schema changes.
+  // localStorage — version 1
+  // Increment to discard stale data when the structure or defaults change.
   @LocalStored(1)
   tableConfig = {
     columns: ['name', 'age'],
@@ -67,7 +67,7 @@ export class MyComponent {
     pageSize: 25
   };
 
-  // sessionStorage (no schema version needed, data is short-lived)
+  // sessionStorage (no version needed, data is short-lived)
   @SessionStored()
   filters = { search: '', category: 'all' };
 
@@ -90,7 +90,7 @@ import { localStored, sessionStored } from '@softwarity/store';
 @Component({ ... })
 export class MyComponent {
 
-  // localStorage + deep tracking + schema versioning
+  // localStorage + deep tracking + versioning
   // storageKey is required: functions don't have access to ClassName.property,
   // unlike decorators which auto-generate it.
   config = localStored(
@@ -147,21 +147,25 @@ Both APIs expose `$`-prefixed signals at **every level of depth**, ideal for tem
 
 Nested signals are available at any depth (`config.a.b.$c()`). Each signal returns the plain value of the property (via `toPlain`), and updates reactively whenever the property or any of its descendants is mutated.
 
-## Schema version management
+## Version management
 
-When the schema changes, increment the schema version. Old stored data is discarded and replaced with the new defaults.
+Increment the version whenever the object structure or the default values change. Old stored data is discarded and replaced with the new defaults.
 
 ```typescript
-// Schema version 1: initial schema
+// Version 1: initial structure
 @LocalStored(1)
 config = { columns: ['name', 'age'], sort: 'asc' };
 
-// Schema version 2: added filter — stale browser data is discarded
+// Version 2: added filter — stale browser data is discarded
 @LocalStored(2)
 config = { columns: ['name', 'age'], sort: 'asc', filter: null };
+
+// Version 3: default columns changed — users get the new defaults
+@LocalStored(3)
+config = { columns: ['name', 'age', 'email'], sort: 'asc', filter: null };
 ```
 
-Only `@LocalStored` and `localStored()` support schema versioning. `@SessionStored` and `sessionStored()` do not need it (data is short-lived).
+Only `@LocalStored` and `localStored()` support versioning. `@SessionStored` and `sessionStored()` do not need it (data is short-lived).
 
 ## User-scoped storage
 

@@ -37,7 +37,7 @@ describe('localStored', () => {
     config.pageSize = 10;
     const stored = JSON.parse(localStorage.getItem('ld-test') || '{}');
     expect(stored.pageSize).toBe(10);
-    expect(stored._schemaVersion).toBe(1);
+    expect(stored._version).toBe(1);
   });
 
   it('should update $-prefixed signal on property assignment', () => {
@@ -94,7 +94,7 @@ describe('localStored', () => {
   });
 
   it('should load from storage on creation', () => {
-    localStorage.setItem('ld-test', JSON.stringify({_schemaVersion: 1, pageSize: 42}));
+    localStorage.setItem('ld-test', JSON.stringify({_version: 1, pageSize: 42}));
     const config = TestBed.runInInjectionContext(() =>
       localStored({pageSize: 5}, {storageKey: 'ld-test', version: 1})
     );
@@ -102,7 +102,7 @@ describe('localStored', () => {
   });
 
   it('should use initial value on version mismatch', () => {
-    localStorage.setItem('ld-test', JSON.stringify({_schemaVersion: 1, pageSize: 42}));
+    localStorage.setItem('ld-test', JSON.stringify({_version: 1, pageSize: 42}));
     const config = TestBed.runInInjectionContext(() =>
       localStored({pageSize: 5}, {storageKey: 'ld-test', version: 2})
     );
@@ -125,14 +125,14 @@ describe('localStored', () => {
 
   it('should react to userId changes', () => {
     StoreService.userId.set('alice');
-    localStorage.setItem('alice_ld-test', JSON.stringify({_schemaVersion: 1, pageSize: 99}));
+    localStorage.setItem('alice_ld-test', JSON.stringify({_version: 1, pageSize: 99}));
 
     const config = TestBed.runInInjectionContext(() =>
       localStored({pageSize: 5}, {storageKey: 'ld-test', version: 1})
     );
     expect(config.pageSize).toBe(99);
 
-    localStorage.setItem('bob_ld-test', JSON.stringify({_schemaVersion: 1, pageSize: 77}));
+    localStorage.setItem('bob_ld-test', JSON.stringify({_version: 1, pageSize: 77}));
     StoreService.userId.set('bob');
     TestBed.flushEffects();
     expect(config.pageSize).toBe(77);
@@ -285,7 +285,7 @@ describe('localStored nested $prop signals', () => {
   it('should expose $prop on nested objects after userId reload', () => {
     StoreService.userId.set('alice');
     localStorage.setItem('alice_ld-reload', JSON.stringify({
-      _schemaVersion: 1, sort: {column: 'age', direction: 'desc'}
+      _version: 1, sort: {column: 'age', direction: 'desc'}
     }));
     const config = TestBed.runInInjectionContext(() =>
       localStored({sort: {column: 'name', direction: 'asc'}}, {storageKey: 'ld-reload', version: 1})
@@ -293,7 +293,7 @@ describe('localStored nested $prop signals', () => {
     expect(config.sort.$column()).toBe('age');
 
     localStorage.setItem('bob_ld-reload', JSON.stringify({
-      _schemaVersion: 1, sort: {column: 'email', direction: 'asc'}
+      _version: 1, sort: {column: 'email', direction: 'asc'}
     }));
     StoreService.userId.set('bob');
     TestBed.flushEffects();
@@ -333,7 +333,7 @@ describe('sessionStored', () => {
     config.filters.search = 'hello';
     const stored = JSON.parse(sessionStorage.getItem('sd-test') || '{}');
     expect(stored.filters.search).toBe('hello');
-    expect(stored._schemaVersion).toBeUndefined();
+    expect(stored._version).toBeUndefined();
   });
 
   it('should expose $-prefixed signals', () => {

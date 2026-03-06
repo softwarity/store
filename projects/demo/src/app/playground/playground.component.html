@@ -18,8 +18,8 @@
 export class MyComponent {
 
   // → localStorage
-  // 1st param: schema version — increment to discard stale data
-  // when the schema changes.
+  // 1st param: version — increment to discard stale data
+  // when the structure or defaults change.
   // 2nd param (optional): custom storage key.
   // Default: ClassName.property (scoped to this component).
   // Set a custom key to share config across components.
@@ -45,7 +45,7 @@ export class MyComponent {
 export class MyComponent {
 
   // → sessionStorage (lives only for the current browser tab)
-  // No schema version needed: data is short-lived.
+  // No version needed: data is short-lived.
   // Optional param: custom storage key.
   // Default: ClassName.property (scoped to this component).
   // Set a custom key to share config across components.
@@ -93,7 +93,7 @@ export class MyComponent {
 export class MyComponent {
 
   // → sessionStorage (lives only for the current browser tab)
-  // No schema version needed: data is short-lived.
+  // No version needed: data is short-lived.
   // storageKey is required: functions don't have access
   // to ClassName.property, unlike decorators which auto-generate it.
   // Use the same key across components to share a persisted config.

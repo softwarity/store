@@ -8,8 +8,8 @@ function loadFromDecoratorStorage<T>(storage: Storage, key: string, initialValue
   }
   try {
     const parsed = JSON.parse(entry);
-    if (version === undefined || version === parsed._schemaVersion) {
-      const {_schemaVersion: _, ...data} = parsed;
+    if (version === undefined || version === parsed._version) {
+      const {_version: _, ...data} = parsed;
       return data as T;
     }
     return initialValue;
@@ -21,7 +21,7 @@ function loadFromDecoratorStorage<T>(storage: Storage, key: string, initialValue
 
 function saveToDecoratorStorage<T>(storage: Storage, key: string, value: T, version?: number): void {
   try {
-    const toStore = version !== undefined ? {...value, _schemaVersion: version} : {...value};
+    const toStore = version !== undefined ? {...value, _version: version} : {...value};
     storage.setItem(key, JSON.stringify(toStore));
   } catch (e) {
     console.warn(`@softwarity/store: Failed to save (key: ${key}).`, e);
